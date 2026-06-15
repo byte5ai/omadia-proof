@@ -15,8 +15,8 @@ jobs:
         with:
           node-version: "20"
 
-      # Code-Repo-Profil: baut/testet, sobald TS-Pakete existieren (Phase 0).
-      # Bis dahin ist der Job grün und validiert nur, dass das Repo konsistent ist.
+      # Code-repo profile: builds/tests once TS packages exist (Phase 0).
+      # Until then the job is green and only checks that the repo is consistent.
       - name: Build & test
         run: |
           if [ -f package.json ]; then
@@ -25,16 +25,16 @@ jobs:
             npm run build --if-present
             npm test
           else
-            echo "No TS packages yet (Stufe A / Phase 0 bootstrap) — nothing to build."
+            echo "No TS packages yet (Stage A / Phase 0 bootstrap) — nothing to build."
           fi
 
-      # Solange das Repo Docs-getragen ist, halten wir die zentralen Dokumente
-      # wenigstens auf balancierte Markdown-Code-Fences geprüft (deterministisch,
-      # dependency-frei). Verschwindet, wenn der Code-Test-Pfad oben greift.
+      # While the repo is docs-driven, at least keep the core documents checked
+      # for balanced Markdown code fences (deterministic, dependency-free).
+      # Goes away once the code-test path above kicks in.
       - name: Docs sanity (balanced code fences)
         run: |
           status=0
-          for f in plan.md research.md AGENTS.md CONTRIBUTING.md; do
+          for f in plan.md research.md AGENTS.md CONTRIBUTING.md README.md; do
             [ -f "$f" ] || continue
             fences=$(grep -c '^```' "$f" || true)
             if [ $((fences % 2)) -ne 0 ]; then

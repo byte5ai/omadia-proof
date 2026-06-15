@@ -1,9 +1,9 @@
-# Engineering-Standards-Status dieses Repos.
-# Single source of truth, gilt host- und agent-übergreifend.
-# Schema: siehe byte5ai/engineering-standards.
+# Engineering-standards status of this repo.
+# Single source of truth, applies across hosts and agents.
+# Schema: see byte5ai/engineering-standards.
 
 status: applied          # applied | exempt
 source: byte5ai/engineering-standards
 decided_on: 2026-06-15
 reviewed_on: 2026-06-15
-reason: "Profil: Code-Repo (TS-Plugin-Bündel, siehe plan.md §4). Heute Docs-only; CI wächst mit Phase 0."
+reason: "Profile: code repo (TS plugin bundle, see plan.md §4). Docs-only today; CI grows with Phase 0."
