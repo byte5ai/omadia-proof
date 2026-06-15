@@ -23,7 +23,7 @@ Die zentrale Spannung, die dieser Plan auflöst: ANP setzt voraus, dass jeder Ak
 
 Diese Sektion trennt **Faktum** (aus SPEC.md / omadia-Code gelesen) von **Inferenz** (mein Schluss daraus). Inferenzen sind als solche markiert.
 
-> **Review-Hinweis (Codex):** Mehrere der unten als „Faktum" geführten Aussagen über die ANP-SPEC und den omadia-Code sind für den ganzen Plan tragend, aber aus diesem Dokument allein nicht prüfbar. Sie sind in §11 als **Annahmen-zu-verifizieren (A1–A8)** gelistet und werden in **Stufe A** (§7) gegen die echten Repos bestätigt, bevor die abhängigen Issues finalisiert werden.
+> **Review-Hinweis (Codex):** Mehrere der unten als „Faktum" geführten Aussagen über die ANP-SPEC und den omadia-Code sind für den ganzen Plan tragend, aber aus diesem Dokument allein nicht prüfbar. Sie sind in §11 als **Annahmen-zu-verifizieren (A1–A8)** gelistet. **Stand 2026-06-15: gegen die echten Repos verifiziert → `research.md` (6/8 bestätigt; A5/A7 mit Einschränkung).**
 
 ### 1.1 Was ANP tatsächlich spezifiziert
 
@@ -306,7 +306,7 @@ interface ProofStoreService {
 
 ## 6. Die heiklen Stellen — ehrlich benannt
 
-Kein Plan ohne die Risiken, die ihn kippen können. R1–R8 wie ursprünglich; R9–R16 aus dem Codex-Review ergänzt. Nach Schwere sortiert innerhalb der Gruppen.
+Kein Plan ohne die Risiken, die ihn kippen können. R1–R8 wie ursprünglich; R9–R18 aus dem Codex-Review ergänzt; R19 aus der A1–A8-Verifikation (`research.md`, §11). Nach Schwere sortiert innerhalb der Gruppen.
 
 | # | Risiko | Schwere | Mitigation |
 |---|---|---|---|
@@ -330,6 +330,7 @@ Kein Plan ohne die Risiken, die ihn kippen können. R1–R8 wie ursprünglich; R
 | **R16** | **Paket-Naming nicht kosmetisch** (Codex C8). `harness-proof-*` widerspricht §1.2; falsche Paketpfade/Manifeste/Artefakte drohen. | **Niedrig-mittel** | Stufe-A-Naming-Entscheidung + Repo-Layout-ADR, *bevor* das erste Paket angelegt wird. |
 | **R17** | **Multi-Tenant-Isolation nicht abgedeckt** (Codex IMPORTANT). Tenant-Scoping für Identities, Mandates, Objects, Anchors, Verify-Link-Zugriff, Auditor-Rechte fehlt. | **Mittel** | Als Querschnitts-Anforderung an `proof.identity@1`/`proof.store@1` führen; Akzeptanzkriterien je betroffenem Paket. |
 | **R18** | **Clock-/Timestamp-Trust** (Codex IMPORTANT). Lokaler vs. Ledger-Timestamp, Skew, Ordering-Disputes. | **Niedrig-mittel** | Präzedenz Ledger-Timestamp vor lokalem; Skew-Handling + Test-Fixtures; in Phase 2 (Verankerung) verankern. |
+| **R19** | **Reife der IOTA-First-Party-Abhängigkeiten** (A1–A8-Verifikation 2026-06-15, SPEC §13.2). IOTA Identity (Beta, kein Stable-Release), Gas Station (pre-1.0), Notarization/Hierarchies (Alpha) tragen Phase 1 (PQC-VCs/custodial Signing) und Phase 2 (Anchor/Sponsoring). | **Mittel** (erst ab Phase 2) | `anchor-mock` hält Phase 0–1 chain-frei (bereits geplant); IOTA-Abhängigkeiten erst Phase 2 scharf; Versionen pinnen, Pre-GA-API-Brüche einplanen; Binding an IOTA Notarization (Anker) + Hierarchies (Trust-List) im PoC (ANP §17 Phase 2) evaluieren statt eigene Anker-Objekte zu rollen. |
 
 ---
 
@@ -398,7 +399,7 @@ Die Sequenz folgt zwei Prinzipien: **(a) frühester Solo-Nutzen ohne Netzwerkeff
 | A | — (Architektur-Freeze) | (Entscheidungen/ADRs) | R11, R12, R13, R15, R16 |
 | 0 | — | (Fundament) | R6 (Canonicalization), CI-Breite |
 | 1 | H→Nobody / Record | „Festhalten" solo | R4 (Adoption), R1-Validierung |
-| 2 | — / Notarize | „Bezeugen" + echte Kette | R3 (Linkgraph), R9 (DA/Verify), R14, R18 |
+| 2 | — / Notarize | „Bezeugen" + echte Kette | R3 (Linkgraph), R9 (DA/Verify), R14, R18, R19 (IOTA-Reife) |
 | 3 | H→H (+ Agent draftet) | „Vereinbaren" zu zweit | R4 (Verify-Link) |
 | 4 | **A→A (+ verbindl. A→H)** | autonome Agenten + Eskalation | R10 (Gate), R1 (Mandate-Caps), R2 |
 | 5 | / Resolve | „Klären" + Escrow | R5 (Escrow-Krypto) |
@@ -461,7 +462,7 @@ Dieses Dokument wurde von Codex (effort high, read-only) reviewt, da es zuvor un
 | MINOR: `parties[]` weggelassen vs. leer | §5.1-Tabelle präzisiert |
 | MINOR: Dateiname `plan.md` | umbenannt |
 
-**Annahmen-zu-verifizieren (A1–A8)** — load-bearing Aussagen über ANP-SPEC/omadia-Code, die in Stufe A gegen die echten Repos zu bestätigen sind, bevor abhängige Issues finalisiert werden:
+**Annahmen-zu-verifizieren (A1–A8)** — load-bearing Aussagen über ANP-SPEC/omadia-Code. **Status: verifiziert 2026-06-15 gegen `byte5ai/anp@main` + `byte5ai/omadia@main` → `research.md`.** Ergebnis: 6/8 bestätigt; **A5** (KG ohne Encryption-at-rest) und **A7** (Vault auf O(100) Agents) mit Einschränkung — beide bestärken die Stufe-A-Gates (R15/R11). Daraus zusätzlich R19 (IOTA-Tooling-Reife) und der Naming-Befund für ADR-0003.
 
 | # | Annahme | Hängt dran |
 |---|---|---|
