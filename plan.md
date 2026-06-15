@@ -1,288 +1,288 @@
-# omadia Proof — Implementierungsplan
+# omadia Proof — Implementation Plan
 
-> **Arbeitsname:** `omadia Proof` · **ANP-Spec:** v0.3-draft · **omadia:** pre-1.0 public preview
-> **Repo:** `byte5ai/omadia-proof` (eigenes Repo, Plugin-Bündel) + **ein** kernel-seitiger Hook in `byte5ai/omadia` (geplant; siehe §4 und R10).
-> **Status dieses Dokuments:** Plan / Entwurf — **Codex-Review eingearbeitet (2026-06-15, siehe §11)**. Abgelegt als `plan.md` im Repo `byte5ai/omadia-proof`.
+> **Working name:** `omadia Proof` · **ANP spec:** v0.3-draft · **omadia:** pre-1.0 public preview
+> **Repo:** `byte5ai/omadia-proof` (its own repo, a plugin bundle) + **one** kernel-side hook in `byte5ai/omadia` (planned; see §4 and R10).
+> **Status of this document:** plan / draft — **Codex review incorporated (2026-06-15, see §11)**. Stored as `plan.md` in `byte5ai/omadia-proof`.
 >
-> **Leitprinzip 1 (UX):** Der Nutzer sieht *Nachweise*, nie Kryptografie. ANP/DLT ist Maschinenraum, kein Produktmerkmal.
-> **Leitprinzip 2 (Spec-Treue):** omadia ist die **erste** ANP-Implementierung. Der RFC bleibt die kanonische Quelle — nicht der Code. Jedes Schema, das Proof definiert, **MUSS** als PR zurück in `byte5ai/anp` (zwingend, siehe §1.4 und §11).
+> **Guiding principle 1 (UX):** the user sees *proofs*, never cryptography. ANP/DLT is the engine room, not a product feature.
+> **Guiding principle 2 (spec fidelity):** omadia is the **first** ANP implementation. The RFC stays the canonical source — not the code. Every schema Proof defines **MUST** flow back as a PR into `byte5ai/anp` (mandatory, see §1.4 and §11).
 >
-> **Referenz-Konvention:** `ANP §X` verweist auf einen Abschnitt der ANP-Spezifikation (`SPEC.md`). Ein **nacktes** `§X` (ohne `ANP`) verweist auf einen Abschnitt *dieses* Plans. Diese Trennung ist bewusst, weil ANP und dieser Plan teils dieselben Nummern tragen (z. B. ANP §5.3 = Mandates ≠ §5.3 = UI-Routen dieses Plans).
+> **Reference convention:** `ANP §X` refers to a section of the ANP specification (`SPEC.md`). A **bare** `§X` (without `ANP`) refers to a section of *this* plan. The distinction is deliberate, because ANP and this plan partly share section numbers (e.g. ANP §5.3 = mandates ≠ §5.3 = UI routes of this plan).
 
 ---
 
-## 0. Worum es geht (in einem Absatz)
+## 0. What this is about (in one paragraph)
 
-ANP ist ein DLT-neutraler Trust-Layer, der jede verbindliche Handlung in ein signiertes, schema-valides, hash-verkettetes und on-chain *verankertes* **ANP Object** verwandelt — Inhalt bleibt off-chain, nur Hash + Status gehen auf die Kette. omadia ist ein selbst-hostbares Agenten-OS mit signierten Plugins, Capability-Registry, Vault und einer „jede Aktion hinterlässt eine Quittung"-Philosophie. **omadia Proof** ist das Modul, das ANP in omadia einbettet und seine gesamte Komplexität — DIDs, Keys, Suites, Anchoring, Escrow — so kapselt, dass ein Manager oder Mitarbeiter ohne IT-Hintergrund nur noch eine Sache erlebt: *„Das ist jetzt verbindlich festgehalten, überprüfbar, manipulationssicher."*
+ANP is a DLT-neutral trust layer that turns every binding action into a signed, schema-valid, hash-chained, on-chain *anchored* **ANP Object** — the content stays off-chain, only a hash + status go to the chain. omadia is a self-hostable agentic OS with signed plugins, a capability registry, a vault, and an "every action leaves a receipt" philosophy. **omadia Proof** is the module that embeds ANP into omadia and capsules its entire complexity — DIDs, keys, suites, anchoring, escrow — so that a manager or employee without an IT background experiences just one thing: *"this is now bindingly recorded, verifiable, tamper-proof."*
 
-Die zentrale Spannung, die dieser Plan auflöst: ANP setzt voraus, dass jeder Akteur Schlüssel verwaltet und Wallets bedient (genau die Friktion, an der DLT-Adoption bei Menschen scheitert) — die ANP-Spec adressiert das explizit über die *Symbiose-These* (ANP §1.4): **Agenten absorbieren die Wallet-/Key-/Fee-Friktion.** In omadia ist dieser Agent bereits da. Proof macht aus „der Mensch muss eine Wallet bedienen" ein „der Mensch tippt auf *Bestätigen*, der Custodial-Layer signiert".
+The central tension this plan resolves: ANP assumes every actor manages keys and operates wallets (exactly the friction that sinks DLT adoption with humans) — the ANP spec addresses this explicitly via the *symbiosis thesis* (ANP §1.4): **agents absorb the wallet/key/fee friction.** In omadia that agent is already there. Proof turns "the human must operate a wallet" into "the human taps *Confirm*, the custodial layer signs."
 
 ---
 
-## 1. Faktenbasis (verifiziert aus den Repos, nicht angenommen)
+## 1. Fact base (verified from the repos, not assumed)
 
-Diese Sektion trennt **Faktum** (aus SPEC.md / omadia-Code gelesen) von **Inferenz** (mein Schluss daraus). Inferenzen sind als solche markiert.
+This section separates **fact** (read from SPEC.md / omadia code) from **inference** (my conclusion from it). Inferences are marked as such.
 
-> **Review-Hinweis (Codex):** Mehrere der unten als „Faktum" geführten Aussagen über die ANP-SPEC und den omadia-Code sind für den ganzen Plan tragend, aber aus diesem Dokument allein nicht prüfbar. Sie sind in §11 als **Annahmen-zu-verifizieren (A1–A8)** gelistet. **Stand 2026-06-15: gegen die echten Repos verifiziert → `research.md` (6/8 bestätigt; A5/A7 mit Einschränkung).**
+> **Review note (Codex):** several of the claims listed below as "fact" about the ANP spec and the omadia code are load-bearing for the whole plan but not checkable from this document alone. They are listed in §11 as **assumptions-to-verify (A1–A8)**. **As of 2026-06-15: verified against the real repos → `research.md` (6/8 confirmed; A5/A7 with a caveat).**
 
-### 1.1 Was ANP tatsächlich spezifiziert
+### 1.1 What ANP actually specifies
 
-| Konzept | Fakt aus SPEC.md |
+| Concept | Fact from SPEC.md |
 |---|---|
-| **Die drei Säulen** | ① Contract (verbindliche Mehrparteien-Vereinbarung) · ② Notarize (Dritter bezeugt eine Tatsache) · ③ Resolve (neutraler Arbiter, Beweise, bindendes Urteil). ANP §1.3, ANP §7–§9. |
-| **Das Spine-Artefakt** | Jede bindende Aktion = ein **ANP Object**: schema-valid, signiert (PQC-fähige, agile Suite), hash-verkettet zum Vorgänger, on-chain verankert nur per Hash+Status. ANP §4.2, ANP §6.1. |
-| **On-/Off-chain** | Off-chain: das volle Object. On-chain: nur `{object_hash, object_type, thread_ref, status, anchored_by, timestamp, locator?, outcome?}`. Kein Payload, keine PII. ANP §6.2, ANP §6.4. |
-| **Identität** | Jeder Akteur ist ein **W3C DID**; alle Nicht-Identitäts-Aussagen sind **W3C VC 2.0**. Kein anonymes Binden. ANP §5.1, ANP §5.2. |
-| **Mandate** | Ein Principal stellt einem Agent ein **Mandate VC** aus: `scope`, `constraints` (max_value, aggregate_value, allowed_counterparties, **escalation_threshold**), `sub_delegation`, `not_before`/`expires`, `status_list`. Aktionen ≥ Threshold brauchen eine Principal-**`approve`**-Co-Signatur. ANP §5.3. |
-| **Thread** | Hash-verkettete Sequenz von Objects unter gemeinsamem `thread_ref` (UUID). ANP §2.3. |
-| **Object-Typen** | `offer, counter_offer, accept, approve, execute, terminate, memorandum, amend, rescind, attest, witness, revoke, assert, dispute, evidence, rule, appeal, enforce, settle, receipt`. ANP §6.1. |
-| **Memorandum** | *Der* Low-Value-/High-Frequency-Fall: ein einzelnes, von allen Parteien co-signiertes Object, **einmal** verankert, terminal bei `ACCEPTED`, **kein Escrow**. Kosten ≈ ein Anchor. ANP §7.2. |
-| **Notarization = Autorschaft + Anker** | Attestation ist ein VC (`type: attest`) mit `witnessing: observed\|relayed`, optional M-of-N-Witness-Quorum. „VC (wer sagt was) + on-chain-Anker (unabhängiger Zeitstempel/Ordnung)". ANP §8.2, ANP §5.2. |
-| **Standalone-Notarisierung** | Eine Notarisierung **ohne Vertrag** überspringt `REQUESTED` — ein Notar „simply issues and anchors". ANP §8.7. |
-| **Dispute (optimistisch)** | `assert` → Challenge-Window → (kein Einspruch ⇒ finalisiert | `settle` co-signiert ⇒ sofort | `dispute` ⇒ Evidence → `rule` → optional `appeal` → `enforce`). Bonds Pflicht auf dem assertiven Pfad. ANP §9.4. |
-| **Small-Claims-Profil** | Für Mikrowerte, wo Arbiter-Gebühren + Bonds den Streitwert übersteigen: vor-vereinbarte `split`-Formel statt Forum, Bonds optional, Abschreckung rein reputationsbasiert. ANP §9.4. |
-| **Vier Enforcement-Pfade** | `ruling` (Arbiter), `uncontested_assertion` (Happy Path), `mutual_settlement` (einstimmiger Verzicht), `formula_split` (Small-Claims). Nur hier gehen Zahlen on-chain (`outcome`). ANP §6.2.1. |
-| **Kostenziel** | „Sub-second finality and near-zero per-action cost, so that recording even trivial determinations is economically sensible." ANP §3.1 Goal 8. Referenz-Chain: IOTA Rebased. ANP §13.2. |
-| **Ehrliche Grenzen** | (a) Kein Token, keine Marktplatz-Funktion, **kein Rechtsrahmen** — rechtliche Anerkennung ist explizit offene Frage (ANP §16.5, ANP §3.2). (b) Escrow-Custody + Transaktions-Submission erben die *native* Chain-Krypto (heute nicht PQC). (c) Aggregate-Caps sind nicht gegenparteien-prüfbar. |
+| **The three pillars** | ① Contract (binding multi-party agreement) · ② Notarize (a third party witnesses a fact) · ③ Resolve (neutral arbiter, evidence, binding ruling). ANP §1.3, ANP §7–§9. |
+| **The spine artifact** | Every binding action = an **ANP Object**: schema-valid, signed (PQC-capable, agile suite), hash-chained to its predecessor, anchored on-chain by hash+status only. ANP §4.2, ANP §6.1. |
+| **On-/off-chain** | Off-chain: the full object. On-chain: only `{object_hash, object_type, thread_ref, status, anchored_by, timestamp, locator?, outcome?}`. No payload, no PII. ANP §6.2, ANP §6.4. |
+| **Identity** | Every actor is a **W3C DID**; all non-identity assertions are **W3C VC 2.0**. No anonymous binding. ANP §5.1, ANP §5.2. |
+| **Mandate** | A principal issues an agent a **mandate VC**: `scope`, `constraints` (max_value, aggregate_value, allowed_counterparties, **escalation_threshold**), `sub_delegation`, `not_before`/`expires`, `status_list`. Actions ≥ threshold need a principal **`approve`** co-signature. ANP §5.3. |
+| **Thread** | A hash-chained sequence of objects under a shared `thread_ref` (UUID). ANP §2.3. |
+| **Object types** | `offer, counter_offer, accept, approve, execute, terminate, memorandum, amend, rescind, attest, witness, revoke, assert, dispute, evidence, rule, appeal, enforce, settle, receipt`. ANP §6.1. |
+| **Memorandum** | *The* low-value/high-frequency case: a single object co-signed by all parties, anchored **once**, terminal at `ACCEPTED`, **no escrow**. Cost ≈ one anchor. ANP §7.2. |
+| **Notarization = authorship + anchor** | An attestation is a VC (`type: attest`) with `witnessing: observed\|relayed`, optionally an M-of-N witness quorum. "VC (who says what) + on-chain anchor (independent timestamp/ordering)". ANP §8.2, ANP §5.2. |
+| **Standalone notarization** | A notarization **without a contract** skips `REQUESTED` — a notary "simply issues and anchors". ANP §8.7. |
+| **Dispute (optimistic)** | `assert` → challenge window → (no challenge ⇒ finalizes | `settle` co-signed ⇒ immediate | `dispute` ⇒ evidence → `rule` → optional `appeal` → `enforce`). Bonds mandatory on the assertive path. ANP §9.4. |
+| **Small-claims profile** | For micro-values where arbiter fees + bonds exceed the dispute value: a pre-agreed `split` formula instead of a forum, bonds optional, deterrence purely reputational. ANP §9.4. |
+| **Four enforcement paths** | `ruling` (arbiter), `uncontested_assertion` (happy path), `mutual_settlement` (unanimous waiver), `formula_split` (small-claims). Only here do numbers go on-chain (`outcome`). ANP §6.2.1. |
+| **Cost goal** | "Sub-second finality and near-zero per-action cost, so that recording even trivial determinations is economically sensible." ANP §3.1 Goal 8. Reference chain: IOTA Rebased. ANP §13.2. |
+| **Honest limits** | (a) No token, no marketplace function, **no legal framework** — legal recognition is explicitly an open question (ANP §16.5, ANP §3.2). (b) Escrow custody + transaction submission inherit the *native* chain crypto (not PQC today). (c) Aggregate caps are not counterparty-checkable. |
 
-### 1.2 Was omadia tatsächlich ist (aus dem Code)
+### 1.2 What omadia actually is (from the code)
 
-| Konzept | Fakt aus dem Repo |
+| Concept | Fact from the repo |
 |---|---|
-| **Stack** | TypeScript-Monorepo. `middleware/` (Node + Postgres/pgvector), `web-ui/` (Next.js Admin-UI), separat distribuierte Plugin-ZIPs. |
-| **Plugin-Modell** | Alles ist Plugin hinter `@omadia/plugin-api`. Plugins = **signierte ZIPs** (ADR-0001), `node_modules` eingebacken, keine npm-Runtime-Trust. |
-| **Capability-Registry** | Versionierte Capabilities `"<name>@<major>"`. Provider deklariert `provides: ["x@1"]` im Manifest, ruft `ctx.services.provide("x", impl)`, Consumer holt `ctx.services.get("x")`. ADR-0003. Entkoppelt: `requires` matcht *jeden* Provider gleichen Namens/Majors. |
-| **Paket-Naming** | Kernel/Infra: `harness-*`. Fachliche Plugins: `agent-*` / `harness-plugin-*`. (Bereits belegt: `verifier@1` = LLM-Claim-Verifier, **nicht** ANP — Namenskollision vermeiden.) **→ Folge für Proof: das Paket-Präfix ist eine offene Naming-Entscheidung, siehe Stufe A / R16.** |
-| **PluginContext** | Pro Plugin gescoped. Zugriff auf `secrets` (Vault), `config`, `services`, `tools` (native Tools an den Orchestrator), `routes` (HTTP), `uiRoutes` (UI-Erweiterungen), `jobs` (Cron), `knowledgeGraph`, `notifications`, `llm`. Plugin-Code importiert **nie** den Vault direkt. |
-| **Vault** | AES-256-GCM, `VAULT_KEY` Pflicht in Prod. Genau der Ort für Custodial-Key-Material. |
-| **Privacy Shield v4** | **Architektonisch kritisch:** rohe Tool-Ergebnisse werden serverseitig hinter einer `datasetId` interniert; nur ein identitätsfreies *Digest* überquert die LLM-Leitung. Identitäts-/ordnungskritische Arbeit läuft in vertrautem Servercode. ADR + `privacyReceipt.ts`. |
-| **Two-Phase-Write** | ADR-0005: Schreibende Aktionen sind explizit getypt, zweistufig (Preview → Bestätigung), „draft-by-default". „Kein agenten-initiierter Write erreicht ein Live-System, ohne dass ein Mensch die exakte Änderung zuerst sieht." |
-| **Audit-Trail** | „Jede Aktion hinterlässt eine Quittung" — Per-Run-Trace + Call-Stack-Viewer. Lokal, nachvollziehbar — aber **nicht** grenzüberschreitend manipulationssicher. (Siehe §2.) |
+| **Stack** | TypeScript monorepo. `middleware/` (Node + Postgres/pgvector), `web-ui/` (Next.js admin UI), separately distributed plugin ZIPs. |
+| **Plugin model** | Everything is a plugin behind `@omadia/plugin-api`. Plugins = **signed ZIPs** (ADR-0001), `node_modules` baked in, no npm runtime trust. |
+| **Capability registry** | Versioned capabilities `"<name>@<major>"`. A provider declares `provides: ["x@1"]` in its manifest, calls `ctx.services.provide("x", impl)`, a consumer calls `ctx.services.get("x")`. ADR-0003. Decoupled: `requires` matches *any* provider of the same name/major. |
+| **Package naming** | Kernel/infra: `harness-*`. Feature plugins: `agent-*` / `harness-plugin-*`. (Already taken: `verifier@1` = LLM claim verifier, **not** ANP — avoid the name collision.) **→ Consequence for Proof: the package prefix is an open naming decision, see Stage A / R16.** |
+| **PluginContext** | Scoped per plugin. Access to `secrets` (vault), `config`, `services`, `tools` (native tools to the orchestrator), `routes` (HTTP), `uiRoutes` (UI extensions), `jobs` (cron), `knowledgeGraph`, `notifications`, `llm`. Plugin code **never** imports the vault directly. |
+| **Vault** | AES-256-GCM, `VAULT_KEY` mandatory in prod. Exactly the place for custodial key material. |
+| **Privacy Shield v4** | **Architecturally critical:** raw tool results are interned server-side behind a `datasetId`; only an identity-free *digest* crosses the LLM line. Identity-/ordering-critical work runs in trusted server code. ADR + `privacyReceipt.ts`. |
+| **Two-phase write** | ADR-0005: write actions are explicitly typed, two-stage (preview → confirm), "draft-by-default". "No agent-initiated write reaches a live system without a human seeing the exact change first." |
+| **Audit trail** | "Every action leaves a receipt" — per-run trace + call-stack viewer. Local, traceable — but **not** tamper-proof across trust boundaries. (See §2.) |
 
-### 1.3 Die entscheidende Inferenz
+### 1.3 The decisive inference
 
-> **Inferenz:** omadias bestehende „Quittung" (Run-Trace) und ein ANP-Proof sind *komplementär, nicht redundant*. Die Run-Quittung beweist *dir selbst*, was *dein* System getan hat (lokales Audit, einseitig vertrauenswürdig). Ein ANP-Proof beweist *einer misstrauischen Gegenpartei oder Aufsicht*, was *zwischen* Parteien über Vertrauensgrenzen hinweg vereinbart/bezeugt wurde — extern verankert, von keiner Seite manipulierbar. Proof ist die Brücke vom *internen Log* zum *externen, geteilten Faktum*. Begründung: Die Run-Quittung lebt in deiner Postgres-DB (§1.2), die ANP §1.2 explizit als nicht-vertrauenswürdige Single-Party-Storage einstuft.
+> **Inference:** omadia's existing "receipt" (run trace) and an ANP proof are *complementary, not redundant*. The run receipt proves *to yourself* what *your* system did (local audit, single-party-trusted). An ANP proof proves *to a mistrustful counterparty or regulator* what was agreed/witnessed *between* parties across trust boundaries — externally anchored, unalterable by either side. Proof is the bridge from the *internal log* to the *external, shared fact*. Reasoning: the run receipt lives in your Postgres DB (§1.2), which ANP §1.2 explicitly classifies as untrusted single-party storage.
 
 ---
 
-### 1.4 ZWINGEND: Schema-Rückfluss in den ANP-RFC
+### 1.4 MANDATORY: schema backflow into the ANP RFC
 
-> **Diese Anforderung ist nicht verhandelbar und kein „nice-to-have".**
+> **This requirement is non-negotiable and not a "nice-to-have".**
 
-omadia ist die erste Implementierung von ANP. Damit definiert das Core-Paket (`proof.objects@1`) faktisch die JSON-Schemas pro Object-Typ, die ANP §6.1 / Appendix A heute nur referenziert, aber nicht ausformuliert. Wer als Erster implementiert, *setzt* den Standard — ob gewollt oder nicht.
+omadia is the first implementation of ANP. The core package (`proof.objects@1`) therefore effectively defines the JSON schemas per object type that ANP §6.1 / Appendix A only references today but does not formalize. Whoever implements first *sets* the standard — intended or not.
 
-Daraus folgt eine harte Regel für jeden Agenten/Entwickler, der an Proof arbeitet:
+This implies a hard rule for every agent/developer working on Proof:
 
-1. **Kein Object-Schema entsteht nur im Proof-Code.** Jedes Schema, das Proof für einen ANP-Object-Typ oder ein VC definiert oder ändert, **MUSS** in derselben Arbeitseinheit als Pull Request gegen `byte5ai/anp` (Appendix A) eingereicht werden.
-2. **Der RFC ist die Quelle der Wahrheit, nicht der Code.** Bei Divergenz zwischen Proof-Schema und SPEC gewinnt die SPEC; der Code wird angepasst, nicht umgekehrt. Proof pinnt `anp_version` und referenziert die Schema-Version aus dem RFC.
-3. **Ein Schema gilt erst als „fertig", wenn der ANP-PR offen ist.** Ein gemergter Proof-Schema-Stand ohne zugehörigen ANP-PR ist ein Regelverstoß, kein Fortschritt. Dies ist Done-Kriterium in jeder Phase, die neue Object-Typen aktiviert.
+1. **No object schema is created only in Proof code.** Every schema Proof defines or changes for an ANP object type or a VC **MUST** be submitted in the same unit of work as a pull request against `byte5ai/anp` (Appendix A).
+2. **The RFC is the source of truth, not the code.** On divergence between a Proof schema and the SPEC, the SPEC wins; the code is adjusted, not the other way around. Proof pins `anp_version` and references the schema version from the RFC.
+3. **A schema counts as "done" only once the ANP PR is open.** A merged Proof schema without a corresponding ANP PR is a rule violation, not progress. This is a Done criterion in every phase that activates new object types.
 
-#### 1.4.1 Schema-Backflow-Matrix (Codex C5 — ersetzt die frühere Prosa)
+#### 1.4.1 Schema-backflow matrix (Codex C5 — replaces the earlier prose)
 
-Diese Matrix ist die *einzige* Quelle dafür, welcher Object-/VC-Typ in welcher Phase erstmals aktiviert wird und welcher ANP-PR dazu offen sein muss. Sie wird in **Stufe A** finalisiert und ist Done-Gate jeder Phase. „Aktiviert" = das Schema wird erstmals produktiv gebaut/validiert; ein Schema wird **nur einmal** definiert (frühere Doppelung `memorandum` in P0 *und* P3 war ein Fehler — P0 *definiert*, P3 *nutzt* es nur für den Co-Signing-Flow).
+This matrix is the *single* source for which object/VC type is first activated in which phase and which ANP PR must be open for it. It is finalized in **Stage A** and is a Done gate of every phase. "Activated" = the schema is first built/validated productively; a schema is defined **only once** (the earlier duplication of `memorandum` in P0 *and* P3 was a mistake — P0 *defines* it, P3 only *uses* it for the co-signing flow).
 
-| Object/VC-Typ | Erst-Aktivierung | ANP-PR Pflicht | Bemerkung |
+| Object/VC type | First activation | ANP PR required | Note |
 |---|---|---|---|
-| `memorandum` | Phase 0 (definiert), Phase 1 (solo), Phase 3 (co-signed) | ✅ Phase 0 | terminal bei `ACCEPTED`, kein Escrow |
-| `attest` (+`witness`) | Phase 2 | ✅ Phase 2 | `observed`/`relayed`; M-of-N optional später |
-| `offer` / `counter_offer` / `accept` | Phase 3 | ✅ Phase 3 | offer/accept-Zyklus, noch ohne Escrow |
-| `approve` | Phase 4 | ✅ Phase 4 | Principal-Co-Signatur am Eskalations-Gate |
-| **Mandate VC** | Phase 4 | ✅ Phase 4 | eigenes VC-Schema (`scope`/`constraints`/`status_list`) — war im alten Gate **vergessen** |
-| Status-List-Credential | Phase 4 | ✅ Phase 4 *(falls Proof es definiert)* | sonst Verweis auf ANP-Referenz |
-| `assert` / `dispute` | Phase 5 | ✅ Phase 5 | optimistischer Dispute-Einstieg |
-| `evidence` | Phase 5 | ✅ Phase 5 | war im alten Gate **vergessen** |
-| `rule` / `appeal` / `enforce` / `settle` | Phase 5 | ✅ Phase 5 | `appeal` war im alten Gate **vergessen** |
-| `receipt` | Phase 1 (Store-Delivery) bzw. Phase 5 (Settlement) | ✅ bei Erst-Aktivierung | DA-/Settlement-Quittung — war im alten Gate **vergessen** |
+| `memorandum` | Phase 0 (defined), Phase 1 (solo), Phase 3 (co-signed) | ✅ Phase 0 | terminal at `ACCEPTED`, no escrow |
+| `attest` (+`witness`) | Phase 2 | ✅ Phase 2 | `observed`/`relayed`; M-of-N optional later |
+| `offer` / `counter_offer` / `accept` | Phase 3 | ✅ Phase 3 | offer/accept cycle, no escrow yet |
+| `approve` | Phase 4 | ✅ Phase 4 | principal co-signature at the escalation gate |
+| **Mandate VC** | Phase 4 | ✅ Phase 4 | its own VC schema (`scope`/`constraints`/`status_list`) — was **missing** from the old gate |
+| Status-list credential | Phase 4 | ✅ Phase 4 *(if Proof defines it)* | otherwise reference the ANP reference |
+| `assert` / `dispute` | Phase 5 | ✅ Phase 5 | optimistic dispute entry |
+| `evidence` | Phase 5 | ✅ Phase 5 | was **missing** from the old gate |
+| `rule` / `appeal` / `enforce` / `settle` | Phase 5 | ✅ Phase 5 | `appeal` was **missing** from the old gate |
+| `receipt` | Phase 1 (store delivery) or Phase 5 (settlement) | ✅ at first activation | DA/settlement receipt — was **missing** from the old gate |
 
-**Begründung:** Driften erste Implementierung und Spec auseinander, entwertet das den RFC — für dessen Autor (byte5) ein direktes Eigentor. Der Aufwand, Schemas synchron zu halten, ist trivial gegenüber dem Schaden einer Spec, der ihre eigene Referenzimplementierung widerspricht.
+**Reasoning:** if the first implementation and the spec drift apart, it devalues the RFC — for its author (byte5) a direct own goal. The effort of keeping schemas in sync is trivial against the damage of a spec that contradicts its own reference implementation.
 
 ---
 
-## 2. Das Produktversprechen (User zuerst)
+## 2. The product promise (user first)
 
-Der Nutzer denkt nicht in Säulen. Er denkt in einer einzigen Frage: **„Will ich, dass das hier später unbestreitbar ist?"** Wenn ja, drückt er einen Knopf. Proof übersetzt diesen Knopf in die richtige ANP-Säule:
+The user doesn't think in pillars. They think in one question: **"do I want this to be undeniable later?"** If yes, they press a button. Proof translates that button into the right ANP pillar:
 
-| Was der Nutzer will | Was er sieht | Was Proof darunter tut |
+| What the user wants | They see | What Proof does underneath |
 |---|---|---|
-| „Festhalten, dass ich/wir das gesagt/entschieden haben" | **Festhalten** | Memorandum (1 Partei = self-attest; N Parteien = co-signiertes Memorandum) |
-| „Bestätigen, dass etwas so ist/war" | **Bezeugen** | Attestation (`witnessing: observed\|relayed`) |
-| „Eine Abmachung verbindlich machen" | **Vereinbaren** | Contract: offer/accept (+ optional Escrow/Kriterien) |
-| „Einen Streit darüber klären lassen" | **Klären** | Dispute: assert/dispute/rule/enforce |
+| "Record that I/we said/decided this" | **Record** | Memorandum (1 party = self-attest; N parties = co-signed memorandum) |
+| "Confirm that something is/was so" | **Witness** | Attestation (`witnessing: observed\|relayed`) |
+| "Make an arrangement binding" | **Agree** | Contract: offer/accept (+ optional escrow/criteria) |
+| "Have a dispute about it settled" | **Resolve** | Dispute: assert/dispute/rule/enforce |
 
-Die vier Worte — **Festhalten · Bezeugen · Vereinbaren · Klären** — sind die *gesamte* nutzerseitige Oberfläche. Alles andere ist gekapselt.
+The four words — **Record · Witness · Agree · Resolve** — are the *entire* user-facing surface. Everything else is capsuled.
 
-### 2.1 Die nicht verhandelbaren UX-Gesetze
+### 2.1 The non-negotiable UX laws
 
-Diese leiten sich direkt aus „die Nutzer sind keine IT-Experten" + ADR-0005 + Privacy Shield v4 ab:
+These follow directly from "the users are not IT experts" + ADR-0005 + Privacy Shield v4:
 
-1. **Kein Krypto-Vokabular im UI.** Niemals „Hash", „DID", „Wallet", „Anchor", „Suite", „Chain", „Gas". Stattdessen: *Nachweis, Identität, festgehalten, überprüfbar, Beleg-Nr.* Der technische Beleg ist über „Details ansehen" erreichbar, nie aufgedrängt.
-2. **Identität ist unsichtbar, aber real.** Jeder omadia-User und jeder Agent bekommt beim ersten Kontakt automatisch ein DID + Keys, im Vault verwahrt (custodial). Der User signiert durch *Bestätigen*, nicht durch Key-Handling. (Architektur in §4; DID-Methode ist Stufe-A-Entscheidung, R12.)
-3. **Bestätigen ist die einzige menschliche Geste.** Genau das Two-Phase-Muster von ADR-0005, erweitert: Preview des exakten, menschenlesbaren Vorgangs → ein Tap → fertig. Proof ist konzeptionell „der erste Write-Connector, der die Aktion *zwischen Organisationen* verbindlich macht".
-4. **Der Anker-Vorgang ist asynchron und still.** Sub-Sekunden-Finalität (ANP §13.2) heißt: der User sieht „✓ Festgehalten" quasi sofort; die Bestätigung der Chain-Verankerung trudelt im Hintergrund nach und aktualisiert nur ein dezentes Status-Icon (analog „gesendet → zugestellt" bei Messengern). *Voraussetzung: ein robuster Async-Confirmation-Pfad mit Retry/Timeout/Idempotenz — siehe R14.*
-5. **Hashes/DIDs überqueren nie die LLM-Leitung.** Striktes Privacy-Shield-v4-Mandat: Proof-Identifikatoren werden serverseitig interniert; der Orchestrator/LLM sieht nur opake Referenzen (`proofRef`) und menschenlesbare Zusammenfassungen, nie Roh-Krypto. **Das hat eine Konsequenz für die Tool-Surface (§5.1):** auch `thread_ref`, `counterparties[]` und `evidence[]` sind *linkbare Identifikatoren bzw. Rohdaten* und dürfen nicht roh über die LLM-Grenze. Der konkrete Datenfluss pro Tool (was sieht das LLM, was wird serverseitig interniert, welche opaken IDs ersetzen Roh-Referenzen) ist **Stufe-A-Pflicht-Spec, R13.** (Begründung: ein Hash/Thread-Ref im Kontextfenster ist sowohl ein Privacy-Leak via `anchored_by`-Linkgraph ANP §6.2 als auch eine Halluzinationsquelle.)
-6. **Ehrlichkeit über Rechtskraft.** Wo ein Vorgang rechtlich einen Notar/Zeugen braucht, sagt Proof das *klar* und positioniert sich als „technisch fertiger, manipulationssicherer Nachweis — die rechtliche Form (Notar/eIDAS) ist separat". Kein Overpromise. (ANP §3.2/ANP §16.5 der Spec verlangt diese Haltung.) **Wording-Disziplin:** im *Produkt-UI* nie „rechtsverbindlich"; „verbindlich" in diesem Plan meint *technisch bindend zwischen den Parteien gemäß ANP*, nicht rechtlich durchsetzbar (R2).
+1. **No crypto vocabulary in the UI.** Never "hash", "DID", "wallet", "anchor", "suite", "chain", "gas". Instead: *proof, identity, recorded, verifiable, receipt no.* The technical receipt is reachable via "View details", never forced.
+2. **Identity is invisible but real.** Every omadia user and every agent automatically gets a DID + keys on first contact, held in the vault (custodial). The user signs by *Confirming*, not by handling keys. (Architecture in §4; the DID method is a Stage-A decision, R12.)
+3. **Confirm is the only human gesture.** Exactly the two-phase pattern from ADR-0005, extended: a preview of the exact, human-readable action → one tap → done. Proof is conceptually "the first write connector that makes the action binding *between organizations*".
+4. **The anchoring step is asynchronous and quiet.** Sub-second finality (ANP §13.2) means: the user sees "✓ Recorded" almost instantly; confirmation of the chain anchoring trickles in in the background and only updates a discreet status icon (like "sent → delivered" in messengers). *Precondition: a robust async confirmation path with retry/timeout/idempotency — see R14.*
+5. **Hashes/DIDs never cross the LLM line.** Strict Privacy-Shield-v4 mandate: Proof identifiers are interned server-side; the orchestrator/LLM sees only opaque references (`proofRef`) and human-readable summaries, never raw crypto. **This has a consequence for the tool surface (§5.1):** `thread_ref`, `counterparties[]` and `evidence[]` are also *linkable identifiers / raw data* and must not cross the LLM boundary raw. The concrete dataflow per tool (what does the LLM see, what is interned server-side, which opaque IDs replace raw references) is a **mandatory Stage-A spec, R13.** (Reasoning: a hash/thread-ref in the context window is both a privacy leak via the `anchored_by` link graph ANP §6.2 and a hallucination source.)
+6. **Honesty about legal force.** Where an action legally needs a notary/witness, Proof says so *clearly* and positions itself as "a technically complete, tamper-proof proof — the legal form (notary/eIDAS) is separate". No overpromise. (ANP §3.2/ANP §16.5 of the spec demands this stance.) **Wording discipline:** in the *product UI* never "legally binding"; "binding" in this plan means *technically binding between the parties per ANP*, not legally enforceable (R2).
 
 ---
 
-## 3. Die vier Topologien — als First-Class-Bürger entworfen
+## 3. The four topologies — designed as first-class citizens
 
-Du willst **Human-to-Nobody, Human-to-Human, Agent-to-Human, Agent-to-Agent** absichern. ANPs Mandate-Modell (ANP §5.3) ist exakt auf die `Human → Agent → Agent → Human`-Achse gebaut; die vier Topologien sind Punkte auf dieser Achse. So mappt Proof sie:
+We want to secure **Human-to-Nobody, Human-to-Human, Agent-to-Human, Agent-to-Agent**. ANP's mandate model (ANP §5.3) is built exactly on the `Human → Agent → Agent → Human` axis; the four topologies are points on this axis. Here's how Proof maps them:
 
-| Topologie | Was es ist | ANP-Mechanik | Wer signiert | UX-Einstiegspunkt | Phase |
+| Topology | What it is | ANP mechanics | Who signs | UX entry point | Phase |
 |---|---|---|---|---|---|
-| **Human → Nobody** | Self-Notarisierung für die Nachwelt; unveränderlicher Milestone, *keine* Gegenpartei jetzt | **Standalone Attestation** (`witnessing: observed` durch den User selbst über sich) **oder** Single-Party-**Memorandum**; anchored, terminal. ANP §8.7 erlaubt „issue and anchor" ohne Vertrag | Nur der User (custodial) | „Festhalten" — solo | 1 |
-| **Human → Human** | Zwei Menschen halten eine Abmachung fest | Co-signiertes **Memorandum** (Record) *oder* offer/accept (verbindlich, optional Escrow) | Beide User (je custodial) | „Festhalten" / „Vereinbaren" — mit Gegenpartei | 3 |
-| **Agent → Human** | Ein Agent proponiert, ein Mensch nimmt an (oder umgekehrt) | offer (Agent unter Mandate) → accept (Human) **oder** Attestation des Agent + Human-`approve` bei Threshold-Überschreitung ANP §5.3 | Agent (Mandate) + Human (`approve`/`accept`) | Agent erzeugt Vorschlag → Human-Bestätigungskarte | **4** *(siehe §3.2)* |
-| **Agent → Agent** | Zwei Agenten schließen end-to-end ab — **dein Favorit** | Voller offer/accept-Zyklus, beide unter Mandate; Eskalation an Menschen nur ≥ `escalation_threshold` | Beide Agenten (Mandate), Menschen nur bei Eskalation | Unsichtbar; nur Eskalationen + Audit-Sicht erscheinen | 4 |
+| **Human → Nobody** | Self-notarization for the record; an immutable milestone, *no* counterparty now | **Standalone attestation** (`witnessing: observed` by the user about themselves) **or** a single-party **memorandum**; anchored, terminal. ANP §8.7 allows "issue and anchor" without a contract | Only the user (custodial) | "Record" — solo | 1 |
+| **Human → Human** | Two people record an arrangement | Co-signed **memorandum** (record) *or* offer/accept (binding, optional escrow) | Both users (each custodial) | "Record" / "Agree" — with a counterparty | 3 |
+| **Agent → Human** | An agent proposes, a human accepts (or vice versa) | offer (agent under mandate) → accept (human) **or** an agent attestation + human `approve` on threshold exceedance ANP §5.3 | Agent (mandate) + human (`approve`/`accept`) | Agent generates a proposal → human confirm card | **4** *(see §3.2)* |
+| **Agent → Agent** | Two agents close end-to-end — **the favorite** | Full offer/accept cycle, both under mandate; escalation to humans only ≥ `escalation_threshold` | Both agents (mandate), humans only on escalation | Invisible; only escalations + the audit view appear | 4 |
 
-### 3.1 Warum Agent-to-Agent das strategische Zentrum ist (und was es exklusiv verlangt)
+### 3.1 Why Agent-to-Agent is the strategic centre (and what it exclusively demands)
 
-> **Inferenz, mit Begründung:** Agent-to-Agent ist der einzige der vier Fälle, der heute *gar nicht* anders lösbar ist (US-1/US-4 der ANP-User-Stories bestätigen das gegen x402/AP2/Virtual-Cards). Die anderen drei haben Notlösungen (E-Mail, DocuSign, Git). A2A wächst zudem mit dem Agentic-Computing-Trend automatisch. Daraus folgt die Priorisierung in §7.
+> **Inference, with reasoning:** Agent-to-Agent is the only one of the four cases that is *not at all* solvable otherwise today (US-1/US-4 of the ANP user stories confirm this against x402/AP2/virtual cards). The other three have workarounds (email, DocuSign, Git). A2A also grows automatically with the agentic-computing trend. Hence the prioritization in §7.
 
-A2A verlangt zwei Dinge, die die anderen Topologien nicht brauchen und die deshalb Architektur-Treiber sind:
+A2A demands two things the other topologies don't need, which therefore are architecture drivers:
 
-- **Agenten-DIDs + Mandate als Laufzeit-Objekt.** Jeder omadia-Agent, der proof-fähig sein soll, braucht ein eigenes DID (nicht das des Users) und ein vom Principal ausgestelltes Mandate VC mit Caps. Das Mandate ist die „Blast-Radius-Grenze" gegen halluzinierende Agenten (ANP §7.5).
-- **Eskalation als Kernel-Hook, nicht als Plugin-Detail.** Wenn eine Agenten-Aktion `escalation_threshold` erreicht, muss *zuverlässig* ein Mensch in die Schleife — das ist dieselbe Human-Checkpoint-Garantie wie ADR-0005, nur ausgelöst durch einen Mandate-Constraint statt durch „ist ein Write". Proof verdrahtet das in den Orchestrator-Dispatch (R10).
+- **Agent DIDs + mandates as runtime objects.** Every omadia agent that should be proof-capable needs its own DID (not the user's) and a principal-issued mandate VC with caps. The mandate is the "blast-radius bound" against hallucinating agents (ANP §7.5).
+- **Escalation as a kernel hook, not a plugin detail.** When an agent action reaches `escalation_threshold`, a human must *reliably* be brought into the loop — the same human-checkpoint guarantee as ADR-0005, only triggered by a mandate constraint instead of by "is a write". Proof wires this into the orchestrator dispatch (R10).
 
-### 3.2 Korrektur: Agent→Human gehört in Phase 4, nicht Phase 3 (Codex C3)
+### 3.2 Correction: Agent→Human belongs in Phase 4, not Phase 3 (Codex C3)
 
-> **Faktum aus diesem Plan:** Ein *verbindlicher* Agent→Human-Vorgang verlangt, dass der Agent **unter Mandate signiert** (§3-Tabelle, §5.1). Agenten-DIDs, Mandate-Ausstellung, `checkAuthority` und das Eskalations-Gate werden aber erst in **Phase 4** eingeführt. Damit ist „Agent schlägt verbindlich vor, Mensch nimmt an" in Phase 3 **nicht** baubar — es wäre eine Vorwärts-Abhängigkeit auf Phase 4.
+> **Fact from this plan:** a *binding* Agent→Human action requires the agent to **sign under a mandate** (§3 table, §5.1). But agent DIDs, mandate issuance, `checkAuthority` and the escalation gate are only introduced in **Phase 4**. So "an agent makes a binding proposal, a human accepts" is **not** buildable in Phase 3 — it would be a forward dependency on Phase 4.
 
-Auflösung:
+Resolution:
 
-- **Phase 3** bleibt auf **Human↔Human** plus den entschärften Fall **„Agent draftet, Mensch signiert als Principal"** — d. h. der Agent *erzeugt nur den Vorschlagsinhalt*, die einzige bindende Signatur ist die des Menschen (kein Agenten-Mandate, keine Agenten-Signatur). Das braucht weder Mandate noch Gate.
-- **Verbindliches Agent→Human** (Agent signiert unter Mandate, Human `approve`/`accept`) wird in **Phase 4** scharfgeschaltet, zusammen mit A2A — beide teilen denselben Mandate-/Gate-Unterbau.
+- **Phase 3** stays on **Human↔Human** plus the defused case **"agent drafts, human signs as principal"** — i.e. the agent only *produces the proposal content*, the only binding signature is the human's (no agent mandate, no agent signature). This needs neither mandate nor gate.
+- **Binding Agent→Human** (agent signs under mandate, human `approve`/`accept`) is switched on in **Phase 4**, together with A2A — both share the same mandate/gate substrate.
 
 ---
 
-## 4. Architektur: wie Proof in omadia sitzt
+## 4. Architecture: how Proof sits in omadia
 
-**Repo-Verteilung (entschieden).** `byte5ai/omadia-proof` ist das richtige Zuhause und bleibt: Proof ist zu fast allem sauberes Plugin-Territorium, und omadia distribuiert Plugins ohnehin als eigenständige ZIPs (Teams, Telegram leben genauso außerhalb des Monorepos). Das gesamte Bündel — Object-Bau, Identity, Signer, Anchor-Adapter, Store, native Tools, UI — wird im Proof-Repo gebaut und als signiertes ZIP in omadia installiert.
+**Repo distribution (decided).** `byte5ai/omadia-proof` is the right home and stays: Proof is clean plugin territory for almost everything, and omadia distributes plugins as standalone ZIPs anyway (Teams, Telegram live outside the monorepo just the same). The whole bundle — object building, identity, signer, anchor adapter, store, native tools, UI — is built in the Proof repo and installed into omadia as a signed ZIP.
 
-**Kernel-Eingriffe — geplant einer, möglicherweise zwei (Codex C2).** Die *bekannte* Ausnahme zum reinen Plugin-Territorium ist das **Eskalations-Gate** (Mandate-Threshold ⇒ Human-`approve`, §5.1): es muss *vor* der Tool-Ausführung in den Orchestrator greifen, und die Plugin-API gibt heute keinen plugin-erweiterbaren Pre-Dispatch-Hook her. Beleg: `harness-verifier` ließ seinen orchestrator-bindenden Wrapper bewusst kernel-seitig — „the Orchestrator class is ~1k LOC and not yet plugin-extractable". Das Gate hat dasselbe Problem und landet deshalb als **ein kleiner, gezielter PR in `byte5ai/omadia` selbst** — und zwar erst in Phase 4, wenn A2A es braucht. **Konditional, nicht garantiert einzig:** ob die **Custodial-Key-Skalierung** (R11 / §7 Stufe A) zusätzlich einen kernel-seitigen Custody-Service braucht, ist eine offene Stufe-A-Frage. Bestätigt sich, dass der per-plugin Vault-Secrets-Store per-User/-Agent-Keys *nicht* in der nötigen Größenordnung trägt, ist das ein **zweiter, größerer** Kernel-Eingriff. Die frühere Formulierung „die einzige Cross-Repo-Änderung des ganzen Projekts" ist daher zu „der geplante Eskalations-Gate-PR; ein zweiter Custody-PR ist möglich und wird in Stufe A geklärt" abgeschwächt. Ein Plugin, das ein bis zwei gezielte Kernel-Hooks braucht, ist immer noch ein Plugin.
+**Kernel changes — one planned, possibly two (Codex C2).** The *known* exception to pure plugin territory is the **escalation gate** (mandate threshold ⇒ human `approve`, §5.1): it must hook into the orchestrator *before* tool execution, and the plugin API exposes no plugin-extensible pre-dispatch hook today. Evidence: `harness-verifier` kept its orchestrator-binding wrapper deliberately kernel-side — "the Orchestrator class is ~1k LOC and not yet plugin-extractable". The gate has the same problem and therefore lands as **one small, targeted PR in `byte5ai/omadia` itself** — and only in Phase 4, when A2A needs it. **Conditional, not guaranteed sole:** whether **custodial-key scaling** (R11 / §7 Stage A) additionally needs a kernel-side custody service is an open Stage-A question. If it turns out the per-plugin vault secrets store does *not* carry per-user/-agent keys at the required scale, that is a **second, larger** kernel change. The earlier phrasing "the only cross-repo change of the whole project" is therefore softened to "the planned escalation-gate PR; a second custody PR is possible and is clarified in Stage A". A plugin that needs one or two targeted kernel hooks is still a plugin.
 
-Proof ist **kein Monolith-Plugin**, sondern eine kleine Schicht von Capability-Providern plus UI-Erweiterungen, exakt nach dem Muster, das omadia für `knowledgeGraph@1`, `verifier@1`, `privacy.redact@1` bereits nutzt (ADR-0003). Das hält ANP austauschbar (DLT-Neutralität auf Code-Ebene gespiegelt) und Proof testbar.
+Proof is **not a monolith plugin**, but a small layer of capability providers plus UI extensions, exactly the pattern omadia already uses for `knowledgeGraph@1`, `verifier@1`, `privacy.redact@1` (ADR-0003). This keeps ANP swappable (DLT neutrality mirrored at the code level) and Proof testable.
 
-> **Naming-Hinweis (Stufe-A-Entscheidung, R16 — Codex C8):** Die Capability-IDs (`proof.objects@1`, `proof.identity@1`, …) sind stabil und werden in diesem Plan durchgängig als primäre Referenz benutzt. Das **Paket-Präfix** ist dagegen *offen*: §1.2 reserviert `harness-*` für *Kernel/Infra im Monorepo* — Proof ist aber ein externes Plugin-Bündel. Vor dem ersten Paket gegen das `omadia-plugin-starter`-Template prüfen, welches Präfix dort für extern distribuierte Plugins gilt (vermutlich `agent-*` oder ein eigener Scope wie `@byte5/proof-*`). Keine Kosmetik: Paketpfade, Manifeste und Release-Artefakte hängen daran. Einmal in Stufe A festlegen, bevor sechs Pakete den falschen Namen tragen.
+> **Naming note (Stage-A decision, R16 — Codex C8):** the capability IDs (`proof.objects@1`, `proof.identity@1`, …) are stable and are used throughout this plan as the primary reference. The **package prefix**, by contrast, is *open*: §1.2 reserves `harness-*` for *kernel/infra in the monorepo* — but Proof is an external plugin bundle. Before the first package, check against the `omadia-plugin-starter` template which prefix applies there for externally distributed plugins (likely `agent-*` or an own scope such as `@omadia/plugin-proof-*`). Not cosmetic: package paths, manifests and release artifacts depend on it. Set it once in Stage A before six packages carry the wrong name.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  omadia UI (web-ui / canvas)                                           │
-│  „Festhalten · Bezeugen · Vereinbaren · Klären"-Karten,                │
-│  Bestätigungs-Dialoge, Proof-Inbox, Beleg-Detailsicht                  │
-│  (uiRoutes vom Proof-Plugin beigesteuert)                              │
+│  "Record · Witness · Agree · Resolve" cards,                           │
+│  confirm dialogs, proof inbox, receipt detail view                     │
+│  (uiRoutes contributed by the Proof plugin)                            │
 └───────────────────────────┬──────────────────────────────────────────┘
-                            │  proofRef (opak) + menschenlesbare Summary
-                            ▼  — NIE Roh-Krypto (Privacy Shield v4, R13)
+                            │  proofRef (opaque) + human-readable summary
+                            ▼  — NEVER raw crypto (Privacy Shield v4, R13)
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Orchestrator-Hooks                                                    │
-│  • Native Tools: proof.record / proof.attest / proof.agree / proof.    │
-│    resolve  (an den Agenten exponiert)                                 │
-│  • Eskalations-Gate: Mandate-Threshold ⇒ Human-approve erzwingen (R10) │
+│  Orchestrator hooks                                                    │
+│  • Native tools: proof.record / proof.attest / proof.agree / proof.    │
+│    resolve  (exposed to the agent)                                     │
+│  • Escalation gate: mandate threshold ⇒ enforce human approve (R10)    │
 └───────────────────────────┬──────────────────────────────────────────┘
                             │  ctx.services.get("proof.*")
                             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  PROOF-CAPABILITY-SCHICHT (neue Pakete; Präfix = Stufe-A-Entscheidung) │
+│  PROOF CAPABILITY LAYER  (new packages; prefix = Stage-A decision)     │
 │                                                                        │
-│  proof.objects@1   ── ANP-Object-Bau: Envelope, JCS-Canonicalization,  │
-│                       Schema-Validierung, Hash-Verkettung. Reine       │
-│                       Logik, chain-agnostisch. Spiegelt ANP §6.        │
+│  proof.objects@1   ── ANP object build: envelope, JCS canonicalization,│
+│                       schema validation, hash chaining. Pure logic,    │
+│                       chain-agnostic. Mirrors ANP §6.                  │
 │                                                                        │
-│  proof.identity@1  ── Custodial DID/Key-Verwaltung pro User+Agent,     │
-│                       Mandate-VC-Ausstellung & -Prüfung, SD-JWT-       │
-│                       Disclosure. Keys NUR im Vault. Spiegelt ANP §5.  │
+│  proof.identity@1  ── custodial DID/key management per user+agent,     │
+│                       mandate-VC issuance & checking, SD-JWT           │
+│                       disclosure. Keys ONLY in the vault. Mirrors ANP §5│
 │                                                                        │
-│  proof.signer@1    ── Signatur-Suite (PQC-fähig: ML-DSA/SLH-DSA),      │
-│                       detached signatures für Co-Signing. ANP §6.3/§6.5│
-│                       Trennt „signieren" von „Schlüssel besitzen".     │
+│  proof.signer@1    ── signature suite (PQC-capable: ML-DSA/SLH-DSA),   │
+│                       detached signatures for co-signing. ANP §6.3/§6.5│
+│                       Separates "signing" from "owning the key".       │
 │                                                                        │
-│  proof.anchor@1    ── DLT-PROFIL-ADAPTER. Das einzige Paket, das die   │
-│  (anchor-iota /      Kette kennt. Default: IOTA-Rebased-Profil.        │
-│   anchor-mock)       Austauschbar gegen EVM-Profil ohne Consumer-      │
-│                      Änderung (ANP §13 als Code-Grenze). anchor(hash), │
-│                      status(), settlement/escrow-Hook, DA-Locator.     │
+│  proof.anchor@1    ── DLT PROFILE ADAPTER. The only package that knows │
+│  (anchor-iota /      the chain. Default: IOTA-Rebased profile.         │
+│   anchor-mock)       Swappable for an EVM profile with no consumer     │
+│                      change (ANP §13 as a code boundary). anchor(hash),│
+│                      status(), settlement/escrow hook, DA locator.     │
 │                                                                        │
-│  proof.store@1     ── Off-chain-Object-Storage + DA-Layer (ANP §6.4):  │
-│                       Mechanismus offen (KG/Memory/Mirror, R15);       │
-│                       + optional content-addressed Mirror; Void-on-    │
-│                      unavailability-Regel; receipts; Verify-Link-Quelle.│
+│  proof.store@1     ── off-chain object storage + DA layer (ANP §6.4):  │
+│                       mechanism open (KG/Memory/Mirror, R15);          │
+│                       + optional content-addressed mirror; void-on-    │
+│                      unavailability rule; receipts; verify-link source.│
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.1 Warum diese Schnitt-Linien
+### 4.1 Why these cut lines
 
-- **`proof.anchor@1` ist die DLT-Naht.** Genau wie omadia `knowledge-graph-inmemory` vs. `-neon` swappt, swappt Proof `anchor-iota` vs. einen künftigen `anchor-evm` — ohne dass Core, Identity oder UI es merken. Das ist ANPs „DLT-neutral" (ANP §3.1 Goal 3) als Code-Architektur, nicht nur als Prosa. **Für Tests:** ein `anchor-mock` (In-Memory-Ledger) macht die gesamte Proof-Logik ohne echte Chain testbar — Pflicht, weil sonst kein CI.
-- **`proof.identity@1` ist die Krypto-Kapsel.** Hier — und nur hier — wird die „kein Wallet"-Magie real: Custodial Keys im Vault, Signieren als Service, Mandate als ausstellbares/prüfbares VC. Wenn ein Enterprise später *eigene* Schlüssel will (HSM, eIDAS-QES), wird nur dieses Paket ersetzt.
-- **`proof.objects@1` ist reine, deterministische Logik.** Kein I/O, keine Kette. Damit ist die heikelste Korrektheits-Anforderung (JCS-Canonicalization, deterministische Proof-Assembly ANP §6.3 — „every party assembles a byte-identical anchored form") isoliert unit-testbar gegen die Spec-Beispiele.
+- **`proof.anchor@1` is the DLT seam.** Just as omadia swaps `knowledge-graph-inmemory` vs. `-neon`, Proof swaps `anchor-iota` vs. a future `anchor-evm` — without core, identity or UI noticing. That is ANP's "DLT-neutral" (ANP §3.1 Goal 3) as code architecture, not just prose. **For tests:** an `anchor-mock` (in-memory ledger) makes the entire Proof logic testable without a real chain — mandatory, because otherwise there's no CI.
+- **`proof.identity@1` is the crypto capsule.** Here — and only here — the "no wallet" magic becomes real: custodial keys in the vault, signing as a service, the mandate as an issuable/checkable VC. If an enterprise later wants *its own* keys (HSM, eIDAS-QES), only this package is replaced.
+- **`proof.objects@1` is pure, deterministic logic.** No I/O, no chain. This isolates the trickiest correctness requirement (JCS canonicalization, deterministic proof assembly ANP §6.3 — "every party assembles a byte-identical anchored form") for unit testing against the spec examples.
 
-### 4.2 Datenmodell (logisch — physischer Store ist Stufe-A-Entscheidung, R15)
+### 4.2 Data model (logical — the physical store is a Stage-A decision, R15)
 
-> **Faktum, das die ursprüngliche Annahme korrigiert:** Ein externes Plugin bekommt **keinen rohen Postgres-Pool**. `MigrationContext` (der `onMigrate`-Hook) erlaubt nur Schreibzugriff auf den per-plugin **Secrets**- und **Memory**-Store, nicht das Anlegen eigener Tabellen. Die unten genannten Entitäten sind deshalb ein **logisches** Modell — wie sie physisch persistiert werden, ist eine **blockierende Stufe-A-Entscheidung** (R15), kein Faktum, und **`proof.store@1` (ab Phase 1 gebraucht) hängt daran** (Codex C1). Mein Stand: der Knowledge Graph (`knowledgeGraph@1`) ist der wahrscheinlichste Träger, weil er ACL und Retrieval mitbringt; zu verifizieren (A5), bevor `proof.store@1` festgelegt wird.
+> **Fact that corrects the original assumption:** an external plugin gets **no raw Postgres pool**. `MigrationContext` (the `onMigrate` hook) only grants write access to the per-plugin **secrets** and **memory** store, not the ability to create its own tables. The entities below are therefore a **logical** model — how they are physically persisted is a **blocking Stage-A decision** (R15), not a fact, and **`proof.store@1` (needed from Phase 1) depends on it** (Codex C1). My take: the knowledge graph (`knowledgeGraph@1`) is the most likely carrier because it brings ACL and retrieval; to be verified (A5) before `proof.store@1` is fixed.
 
-Strikte On-/Off-chain-Trennung der Spec bleibt zwingend: PII lebt ausschließlich off-chain in `body` (verschlüsselt at rest über den existierenden Mechanismus); auf der Kette nur Hash + Status.
+The spec's strict on-/off-chain separation stays mandatory: PII lives exclusively off-chain in `body` (encrypted at rest via the existing mechanism); on the chain only hash + status.
 
-| Entität (logisch) | Zweck | Schlüsselfelder |
+| Entity (logical) | Purpose | Key fields |
 |---|---|---|
-| `proof_identities` | DID + verschlüsselte Key-Referenz pro User/Agent | `subject_id` (FK user/agent), `did`, `key_vault_ref`, `kind` (`human`/`agent`), `created_at` |
-| `proof_mandates` | Ausgestellte Mandate-VCs (Agent-Autorität) | `mandate_id`, `principal_did`, `agent_did`, `scope[]`, `constraints`, `not_before`, `expires`, `status_list_ref`, `revoked_at?` |
-| `proof_objects` | Off-chain ANP Objects (das volle Artefakt) | `object_id`, `thread_ref`, `type`, `sequence`, `previous_hash`, `body` (**verschlüsselt at rest**), `proof[]`, `anchored_hash?`, `da_locator?` |
-| `proof_threads` | Abgeleiteter Thread-Zustand (off-chain repliziert, **Cache**) | `thread_ref`, `topology`, `derived_state`, `head_hash`, `pillar`, `owner_subject_id`, `counterparties[]` |
-| `proof_anchors` | Spiegel der On-chain-Anker (schnelle Abfrage ohne Chain-Roundtrip) | `object_hash`, `thread_ref`, `status`, `anchored_by_did`, `ledger_timestamp`, `confirmation_state` |
-| `proof_status_snapshots` | Retained Status-List-Credentials für Point-in-time-Beweis (ANP §5.3) | `snapshot_hash`, `fetched_at`, `credential` |
+| `proof_identities` | DID + encrypted key reference per user/agent | `subject_id` (FK user/agent), `did`, `key_vault_ref`, `kind` (`human`/`agent`), `created_at` |
+| `proof_mandates` | Issued mandate VCs (agent authority) | `mandate_id`, `principal_did`, `agent_did`, `scope[]`, `constraints`, `not_before`, `expires`, `status_list_ref`, `revoked_at?` |
+| `proof_objects` | Off-chain ANP objects (the full artifact) | `object_id`, `thread_ref`, `type`, `sequence`, `previous_hash`, `body` (**encrypted at rest**), `proof[]`, `anchored_hash?`, `da_locator?` |
+| `proof_threads` | Derived thread state (off-chain replicated, **cache**) | `thread_ref`, `topology`, `derived_state`, `head_hash`, `pillar`, `owner_subject_id`, `counterparties[]` |
+| `proof_anchors` | Mirror of the on-chain anchors (fast query without a chain round-trip) | `object_hash`, `thread_ref`, `status`, `anchored_by_did`, `ledger_timestamp`, `confirmation_state` |
+| `proof_status_snapshots` | Retained status-list credentials for point-in-time proof (ANP §5.3) | `snapshot_hash`, `fetched_at`, `credential` |
 
-`proof_threads.derived_state` wird **nie** als Quelle der Wahrheit behandelt — es ist ein Cache, der bei Bedarf aus den Ankern + Objects neu abgeleitet wird (SPEC m5: „fine state off-chain by replaying the Thread's anchored Object types"). Das ist die Versicherung gegen genau den Failure-Mode, den ANP §1.2 nennt: eine manipulierte lokale DB darf den Zustand nicht verfälschen können.
+`proof_threads.derived_state` is **never** treated as the source of truth — it is a cache re-derived on demand from the anchors + objects (SPEC m5: "fine state off-chain by replaying the Thread's anchored Object types"). That is the insurance against exactly the failure mode ANP §1.2 names: a manipulated local DB must not be able to falsify the state.
 
 ---
 
-## 5. API-Surface
+## 5. API surface
 
-### 5.1 Native Tools für den Agenten (an den Orchestrator exponiert)
+### 5.1 Native tools for the agent (exposed to the orchestrator)
 
-Vier Tools, gespiegelt an den vier Nutzer-Worten. Jedes nimmt strukturierte Eingaben, gibt einen **opaken `proofRef`** + menschenlesbare Summary zurück — nie Roh-Krypto:
+Four tools, mirrored on the four user words. Each takes structured input and returns an **opaque `proofRef`** + a human-readable summary — never raw crypto:
 
-| Tool | Säule | Eingabe (schema-validiert) | Verhalten |
+| Tool | Pillar | Input (schema-validated) | Behavior |
 |---|---|---|---|
-| `proof.record` | Memorandum | `{ statement, parties[]? }` | 0/fehlende `parties` ⇒ Human-to-Nobody-Self-Memorandum; N ⇒ Co-Signing-Flow. Terminal bei `ACCEPTED`. (`parties` weggelassen ≡ leer.) |
-| `proof.attest` | Notarization | `{ subject_kind, statement, witnessing, evidence[]? }` | Standalone-Attestation. Erzwingt ehrliche `observed`/`relayed`-Deklaration (ANP §8.1). |
-| `proof.agree` | Contract | `{ terms, counterparties[], escrow? }` | offer→accept-Zyklus. `escrow.required` ⇒ voller Settlement-Pfad; sonst günstiger Record-Pfad. |
-| `proof.resolve` | Dispute | `{ thread_ref, action: assert\|dispute\|evidence, payload }` | Optimistischer Dispute. Wählt automatisch small-claims-Profil unterhalb der Wertschwelle (ANP §9.4). |
+| `proof.record` | Memorandum | `{ statement, parties[]? }` | 0/omitted `parties` ⇒ Human-to-Nobody self-memorandum; N ⇒ co-signing flow. Terminal at `ACCEPTED`. (`parties` omitted ≡ empty.) |
+| `proof.attest` | Notarization | `{ subject_kind, statement, witnessing, evidence[]? }` | Standalone attestation. Enforces an honest `observed`/`relayed` declaration (ANP §8.1). |
+| `proof.agree` | Contract | `{ terms, counterparties[], escrow? }` | offer→accept cycle. `escrow.required` ⇒ full settlement path; otherwise the cheaper record path. |
+| `proof.resolve` | Dispute | `{ thread_ref, action: assert\|dispute\|evidence, payload }` | Optimistic dispute. Automatically selects the small-claims profile below the value threshold (ANP §9.4). |
 
-> **Privacy-Shield-Konsequenz (R13):** Die obigen Eingaben enthalten linkbare Identifikatoren (`thread_ref`, `counterparties[]`) und potenziell Rohdaten (`evidence[]`). Über die LLM-Grenze gehen diese **nicht roh**, sondern als serverseitig aufgelöste opake Handles. Der Tool-Vertrag (LLM-sichtbar vs. server-interniert) wird in **Stufe A** pro Tool spezifiziert, *bevor* die Tools gebaut werden.
+> **Privacy-Shield consequence (R13):** the inputs above contain linkable identifiers (`thread_ref`, `counterparties[]`) and potentially raw data (`evidence[]`). These do **not** cross the LLM boundary raw, but as server-resolved opaque handles. The tool contract (LLM-visible vs. server-interned) is specified per tool in **Stage A**, *before* the tools are built.
 
-**Mandate-Gate (Orchestrator-Hook, nicht im Tool):** Vor Ausführung prüft der Dispatch, ob der handelnde Agent ein gültiges Mandate hat *und* die Aktion in `constraints` liegt. ≥ `escalation_threshold` ⇒ Tool-Ausführung pausiert, eine Human-Bestätigungskarte wird erzeugt (`approve`), erst danach läuft es weiter. Genau die ADR-0005-Garantie, getriggert durch Mandate statt durch Write-Typ. (Kernel-PR, Phase 4, R10.)
+**Mandate gate (orchestrator hook, not in the tool):** before execution the dispatch checks whether the acting agent has a valid mandate *and* the action is within `constraints`. ≥ `escalation_threshold` ⇒ tool execution pauses, a human confirm card is generated (`approve`), and only then does it continue. Exactly the ADR-0005 guarantee, triggered by mandate instead of by write type. (Kernel PR, Phase 4, R10.)
 
-### 5.2 Capability-Interfaces (Plugin-zu-Plugin, intern)
+### 5.2 Capability interfaces (plugin-to-plugin, internal)
 
 ```typescript
-// proof.objects@1  — reine Logik, kein I/O
+// proof.objects@1  — pure logic, no I/O
 interface ProofObjectsService {
   buildEnvelope(input: ObjectInput): UnsignedObject;       // ANP §6.1
-  canonicalizeForSigning(obj: UnsignedObject): Uint8Array; // JCS, proof entfernt ANP §6.3
-  canonicalizeAnchored(obj: SignedObject): Uint8Array;     // inkl. proof[]
-  assembleProofs(obj, sigs): SignedObject;                 // deterministische Reihenfolge ANP §6.3
-  validate(obj): SchemaResult;                             // gegen registriertes JSON-Schema
+  canonicalizeForSigning(obj: UnsignedObject): Uint8Array; // JCS, proof removed ANP §6.3
+  canonicalizeAnchored(obj: SignedObject): Uint8Array;     // incl. proof[]
+  assembleProofs(obj, sigs): SignedObject;                 // deterministic order ANP §6.3
+  validate(obj): SchemaResult;                             // against the registered JSON schema
 }
 
-// proof.identity@1  — die Krypto-Kapsel
+// proof.identity@1  — the crypto capsule
 interface ProofIdentityService {
   ensureIdentity(subjectId: string, kind: 'human'|'agent'): Promise<Did>; // auto-provision
   issueMandate(principal: Did, agent: Did, c: MandateConstraints): Promise<MandateVc>;
-  checkAuthority(agentDid, action, value): Promise<AuthorityVerdict>;      // ANP §5.3 Regeln
-  proveDisclosure(mandate, predicate): Promise<SdJwtPresentation>;         // ANP §6.6, kein Cap-Leak
+  checkAuthority(agentDid, action, value): Promise<AuthorityVerdict>;      // ANP §5.3 rules
+  proveDisclosure(mandate, predicate): Promise<SdJwtPresentation>;         // ANP §6.6, no cap leak
 }
 
 // proof.signer@1
 interface ProofSignerService {
-  sign(subjectId: string, input: Uint8Array): Promise<DetachedSignature>;  // Key bleibt im Vault
+  sign(subjectId: string, input: Uint8Array): Promise<DetachedSignature>;  // key stays in the vault
   suite(): SuiteId;                                                        // anp-suite-2 (PQC)
 }
 
-// proof.anchor@1  — die DLT-Naht (default: IOTA Rebased)
+// proof.anchor@1  — the DLT seam (default: IOTA Rebased)
 interface ProofAnchorService {
   anchor(hash: TaggedHash, meta: AnchorMeta): Promise<AnchorReceipt>;      // ANP §6.2
   setStatus(hash, status): Promise<void>;
-  openEscrow?(terms): Promise<EscrowId>;   // optional je Profil-Capability ANP §10
+  openEscrow?(terms): Promise<EscrowId>;   // optional per profile capability ANP §10
   enforce?(directive): Promise<void>;      // ANP §6.2.1
   confirmationState(hash): Promise<'pending'|'final'>;
 }
@@ -290,191 +290,191 @@ interface ProofAnchorService {
 // proof.store@1
 interface ProofStoreService {
   put(obj: SignedObject): Promise<void>;
-  get(hash: TaggedHash): Promise<SignedObject | undefined>; // Void-on-unavailability ANP §6.4
-  deliver(obj, counterparties): Promise<Receipt[]>;         // DA-Pflicht + receipt
+  get(hash: TaggedHash): Promise<SignedObject | undefined>; // void-on-unavailability ANP §6.4
+  deliver(obj, counterparties): Promise<Receipt[]>;         // DA obligation + receipt
 }
 ```
 
-### 5.3 UI-Routen (vom Proof-Plugin via `uiRoutes` beigesteuert)
+### 5.3 UI routes (contributed by the Proof plugin via `uiRoutes`)
 
-- `/proof` — **Proof-Inbox**: alle Vorgänge des Users, gefiltert nach Status (festgehalten / wartet auf Gegenpartei / wartet auf mich / in Klärung / abgeschlossen). Kein Krypto sichtbar.
-- `/proof/:ref` — **Beleg-Detailsicht**: menschenlesbare Zusammenfassung oben; „Technischen Beleg ansehen" als Aufklapp-Sektion (hier — und nur hier — werden Hash/DID/Anker für Auditoren sichtbar, read-only).
-- **Bestätigungs-Dialog** (Canvas-Komponente, kein eigener Pfad): Preview des exakten Vorgangs, ein Bestätigen-Button. Das menschliche Signatur-Moment.
-- **Verify-Link** (Phase 2/3, read-only, permissionless): eine extern teilbare, omadia-unabhängige Prüfseite für einen Beleg. Was sie exponiert, wie autorisiert/redigiert wird und wie sie sich bei nicht verfügbarem Object verhält, ist Teil der DA-/Verify-Link-Spezifikation (R9).
+- `/proof` — **proof inbox**: all of the user's actions, filtered by status (recorded / waiting on counterparty / waiting on me / in resolution / closed). No crypto visible.
+- `/proof/:ref` — **receipt detail view**: human-readable summary at the top; "View technical receipt" as an expandable section (here — and only here — hash/DID/anchor become visible to auditors, read-only).
+- **Confirm dialog** (canvas component, no own path): preview of the exact action, one confirm button. The human signature moment.
+- **Verify-link** (Phase 2/3, read-only, permissionless): an externally shareable, omadia-independent verification page for a receipt. What it exposes, how it is authorized/redacted, and how it behaves for an unavailable object is part of the DA/verify-link specification (R9).
 
 ---
 
-## 6. Die heiklen Stellen — ehrlich benannt
+## 6. The tricky parts — named honestly
 
-Kein Plan ohne die Risiken, die ihn kippen können. R1–R8 wie ursprünglich; R9–R18 aus dem Codex-Review ergänzt; R19 aus der A1–A8-Verifikation (`research.md`, §11). Nach Schwere sortiert innerhalb der Gruppen.
+No plan without the risks that can topple it. R1–R8 as originally; R9–R18 added from the Codex review; R19 from the A1–A8 verification (`research.md`, §11). Sorted by severity within the groups.
 
-| # | Risiko | Schwere | Mitigation |
+| # | Risk | Severity | Mitigation |
 |---|---|---|---|
-| R1 | **Custodial Keys = Single Point of Compromise.** Wenn der Vault fällt, kann ein Angreifer im Namen *aller* User/Agenten signieren. Das ist der Preis für „kein Wallet". | **Hoch** | Vault ist bereits AES-256-GCM + `VAULT_KEY`-Pflicht. Zusätzlich: per-subject Key-Derivation, Mandate-Caps begrenzen den Blast-Radius pro Agent (ANP §7.5), Eskalation für Hochwert-Aktionen. Upgrade-Pfad zu HSM/eigenen Keys über Austausch nur von `proof.identity@1`. **Klar dokumentieren** (ADR-0001), dass dies eine bewusste Custody-Entscheidung ist. Operatives Key-Lifecycle separat: R11. |
-| R2 | **Rechtskraft wird überschätzt.** Nutzer könnten glauben, ein Proof ersetze einen Notar. Tut er nicht (ANP §16.5, ANP §3.2). | **Hoch** | UX-Gesetz 6: explizite, ehrliche Einordnung im UI bei jedem Hochwert-/formbedürftigen Vorgang. Proof positioniert sich als *technischer* Nachweis, nicht als Rechtsform. Im UI nie „rechtsverbindlich" texten; „verbindlich" = technisch bindend gemäß ANP. |
-| R3 | **Privacy-Leak via On-chain-Linkgraph.** `anchored_by`-DID + `thread_ref` erzeugen einen permanenten, un-löschbaren „wer-mit-wem-wann"-Graph auf öffentlicher Kette (ANP §6.2 m6). | **Mittel-hoch** | Pairwise-DIDs pro Beziehung/Thread, wo eine natürliche Person identifizierbar ist (ANP §12 macht das zur Pflicht — A2). `proof.identity@1` generiert diese automatisch — der User merkt nichts. Verschärft durch GDPR-Spannung: R13b. |
-| R4 | **Gegenparteien-Adoption.** Jeder Vorgang mit Gegenpartei braucht *beide* Seiten auf ANP/omadia (ANP „shared adoption costs"). | **Mittel-hoch** | Human-to-Nobody (Self-Notarisierung) hat **keine** Gegenpartei und ist deshalb der Adoptions-Türöffner: sofortiger Solo-Nutzen ohne Netzwerkeffekt. Daraus folgt Phase 1 (§7). Für Gegenparteien ohne omadia: der „Verify-Link" (read-only Verifikation im Browser, permissionless ANP §2.2) — Prüfen, nicht Mitzeichnen (siehe Phase 3 Scope-Grenze). |
-| R5 | **Escrow-Custody erbt native Chain-Krypto (nicht PQC).** Ein Quanten-Angreifer auf das Chain-Konto könnte Escrow-Mittel bewegen, obwohl die Binding-Signaturen PQC-sicher bleiben (ANP §6.5 „honest limitation"). | **Mittel** (nur escrow-tragende Threads) | Escrow-Beträge + Dispute-Fenster bounden; Chain mit glaubwürdigem PQC-Migrationspfad bevorzugen; als Langzeit-Risiko offenlegen. Die meisten Proof-Vorgänge (Record/Attest) tragen *kein* Escrow und sind davon unberührt. |
-| R6 | **JCS-Canonicalization-Bugs ⇒ Signaturen verifizieren nicht über Parteien hinweg.** Wenn zwei Implementierungen nicht byte-identisch kanonisieren, ist Multi-Party-Co-Signing tot. | **Mittel** | `proof.objects@1` als reine Logik gegen die SPEC-Beispiele unit-getestet; Konformitäts-Testvektoren aus Appendix A (A1). CI-Gate. |
-| R7 | **ANP ist v0.3-draft mit offenen Fragen (ANP §16).** Die Spec kann sich vor v1.0 ändern. | **Niedrig-mittel** | `proof.objects@1` pinnt `anp_version`. Proof-Module versionieren mit. Migrations-/Versionierungs-Policy operationalisieren: R14b. Offene-Fragen-Bereiche (Trust-List-Governance, Arbiter-Pool-Bootstrap) erst in späteren Phasen produktiv. |
-| R8 | **Namenskollision `verifier@1`.** Existiert bereits als LLM-Claim-Verifier. | **Niedrig** | Proof nutzt `proof.*`-Namespace durchgängig. Kein Capability heißt `verify`/`verifier`. (Paket-Präfix separat: R16.) |
-| **R9** | **Externe Verifizierbarkeit ohne Data-Availability-Fläche** (Codex C4). Ein Chain-Hash allein reicht nicht, um einen Beleg unabhängig zu prüfen, wenn das volle Off-chain-Object nicht abrufbar ist — die „überlebt omadia"-/Verify-Link-Versprechen (Phase 2/3) brauchen eine DA-Schicht. | **Mittel-hoch** | DA-Locator + öffentliche Abruf-/Verify-Link-Fläche als **explizite Phase-2-Vorbedingung**, bevor „überlebt omadia" behauptet wird. Spezifizieren: was der Link zeigt, Autorisierung, Redaction, Locator-Verhalten, Semantik bei nicht verfügbarem Object. |
-| **R10** | **Kernel-Eskalations-Gate** (Codex C2/C3). Pre-Dispatch-Hook im ~1k-LOC-Orchestrator; einzige *geplante* Kernel-Änderung. | **Mittel** | Als generischer Pre-Dispatch-Policy-Hook im Kernel entwerfen (nicht proof-spezifisch verdrahtet), Phase 4. Kontrakt + Tests vor dem PR; `harness-verifier`-Präzedenz (A6) bestätigen. |
-| **R11** | **Custodial-Key-Skalierung & -Lifecycle** (Codex C2 + IMPORTANT). Trägt der per-plugin Vault per-User/-Agent-Keys in nötiger Größenordnung? Backup/Restore, Kompromittierungs-Revocation, Rotation, Recovery, Operator-Runbooks fehlen. | **Hoch** | Stufe-A-Verifikation gegen den echten Vault-Stand (A7); ggf. kernel-seitiger Custody-Service (zweiter Kernel-Eingriff, §4). Lifecycle-Runbook als eigenes Cross-Cutting-Workitem. |
-| **R12** | **DID-Methode + Resolver ungelöst** (Codex C6). Bestimmt, ob Identität Ledger-Lookup braucht (`did:iota`/`did:ethr`) oder lokal/custodial auflösbar ist (`did:key`/`did:web`); muss zum Anchor-Profil passen; **schwer reversibel**, weil DIDs in jedem anchored Object stehen. | **Hoch** | Blockierende Stufe-A-Entscheidung *vor* `proof.identity@1`: Methode, Resolver, Rotation, Pairwise-Mapping, Migration. Mein Stand: `did:key` (custodial, kein Lookup) oder `did:web` unter Instanz-Domain; `did:iota` erst, wenn das Reference-Profil es nahelegt. |
-| **R13** | **Privacy-Shield-Datenfluss pro Tool unspezifiziert** (Codex C7). `thread_ref`/`counterparties[]`/`evidence[]` in Tool-Inputs könnten linkbare IDs/Rohdaten über die LLM-Grenze leaken. | **Mittel-hoch** | Stufe-A-Pflicht-Spec pro Tool: LLM-sichtbar vs. server-interniert vs. summarized; opake Handles statt Roh-Referenzen (UX-Gesetz 5). |
-| **R13b** | **GDPR / Recht auf Löschung vs. unlöschbare Anker** (Codex IMPORTANT). Hash + Linkgraph bleiben on-chain, auch wenn off-chain gelöscht wird. | **Mittel** | Entscheidung: was ist löschbar (off-chain `body`/Keys), was bleibt (Hash/Anker); wie wird der verbleibende Hash/Link erklärt; bricht Löschung die Verifikation? Als Compliance-Workitem, vor produktiver PII-Verarbeitung. |
-| **R14** | **Observability & Async-Failure-Handling fehlen** (Codex IMPORTANT). Anchor-Retry, Dead-Letter, Finality-Timeout, Duplicate-Anchor-Idempotenz, Metriken, degraded states. | **Mittel** | Async-Anchor-Worker mit Retry/Idempotenz/Timeout + user-sichtbarem degraded state (UX-Gesetz 4). Observability-Baseline als Cross-Cutting. |
-| **R14b** | **`anp_version`-Migration nicht operationalisiert** (Codex IMPORTANT). Version gepinnt, aber kein Schema-Versions-Registry/Migrations-Policy/Backward-Verify. | **Niedrig-mittel** | Schema-Versions-Registry, Migrations-Policy, Backward-Verification, Fixture-Versionierung, Kompatibilitäts-Tests — mit der Schema-Matrix (§1.4.1) koppeln. |
-| **R15** | **Object-Store-Mechanismus offen, Phase 1 hängt daran** (Codex C1). KG vs. Memory vs. Mirror; ACL/Retrieval/Encryption/Export/Retention undefiniert. | **Hoch** | Blockierende Stufe-A-Entscheidung *vor* `proof.store@1`/Phase 1: logisch→physisch-Mapping, ACL-Modell, Retrieval-API, Verschlüsselung, Export, Retention + Akzeptanztests (A4/A5). |
-| **R16** | **Paket-Naming nicht kosmetisch** (Codex C8). `harness-proof-*` widerspricht §1.2; falsche Paketpfade/Manifeste/Artefakte drohen. | **Niedrig-mittel** | Stufe-A-Naming-Entscheidung + Repo-Layout-ADR, *bevor* das erste Paket angelegt wird. |
-| **R17** | **Multi-Tenant-Isolation nicht abgedeckt** (Codex IMPORTANT). Tenant-Scoping für Identities, Mandates, Objects, Anchors, Verify-Link-Zugriff, Auditor-Rechte fehlt. | **Mittel** | Als Querschnitts-Anforderung an `proof.identity@1`/`proof.store@1` führen; Akzeptanzkriterien je betroffenem Paket. |
-| **R18** | **Clock-/Timestamp-Trust** (Codex IMPORTANT). Lokaler vs. Ledger-Timestamp, Skew, Ordering-Disputes. | **Niedrig-mittel** | Präzedenz Ledger-Timestamp vor lokalem; Skew-Handling + Test-Fixtures; in Phase 2 (Verankerung) verankern. |
-| **R19** | **Reife der IOTA-First-Party-Abhängigkeiten** (A1–A8-Verifikation 2026-06-15, SPEC §13.2). IOTA Identity (Beta, kein Stable-Release), Gas Station (pre-1.0), Notarization/Hierarchies (Alpha) tragen Phase 1 (PQC-VCs/custodial Signing) und Phase 2 (Anchor/Sponsoring). | **Mittel** (erst ab Phase 2) | `anchor-mock` hält Phase 0–1 chain-frei (bereits geplant); IOTA-Abhängigkeiten erst Phase 2 scharf; Versionen pinnen, Pre-GA-API-Brüche einplanen; Binding an IOTA Notarization (Anker) + Hierarchies (Trust-List) im PoC (ANP §17 Phase 2) evaluieren statt eigene Anker-Objekte zu rollen. |
+| R1 | **Custodial keys = single point of compromise.** If the vault falls, an attacker can sign in the name of *all* users/agents. That is the price of "no wallet". | **High** | The vault is already AES-256-GCM + mandatory `VAULT_KEY`. Additionally: per-subject key derivation, mandate caps bound the blast radius per agent (ANP §7.5), escalation for high-value actions. Upgrade path to HSM/own keys by replacing only `proof.identity@1`. **Document clearly** (ADR-0001) that this is a deliberate custody decision. Operational key lifecycle separately: R11. |
+| R2 | **Legal force is overestimated.** Users might believe a Proof replaces a notary. It doesn't (ANP §16.5, ANP §3.2). | **High** | UX law 6: explicit, honest framing in the UI for every high-value/form-requiring action. Proof positions itself as a *technical* proof, not a legal form. In the UI never say "legally binding"; "binding" = technically binding per ANP. |
+| R3 | **Privacy leak via the on-chain link graph.** `anchored_by` DID + `thread_ref` create a permanent, un-erasable "who-with-whom-when" graph on a public chain (ANP §6.2 m6). | **Medium-high** | Pairwise DIDs per relationship/thread where a natural person is identifiable (ANP §12 makes this mandatory — A2). `proof.identity@1` generates these automatically — the user notices nothing. Aggravated by the GDPR tension: R13b. |
+| R4 | **Counterparty adoption.** Every action with a counterparty needs *both* sides on ANP/omadia (ANP "shared adoption costs"). | **Medium-high** | Human-to-Nobody (self-notarization) has **no** counterparty and is therefore the adoption opener: immediate solo value with no network effect. Hence Phase 1 (§7). For counterparties without omadia: the "verify-link" (read-only verification in the browser, permissionless ANP §2.2) — verify, not co-sign (see Phase 3 scope boundary). |
+| R5 | **Escrow custody inherits native chain crypto (not PQC).** A quantum attacker on the chain account could move escrow funds even though the binding signatures stay PQC-safe (ANP §6.5 "honest limitation"). | **Medium** (escrow-bearing threads only) | Bound escrow amounts + dispute windows; prefer a chain with a credible PQC migration path; disclose as a long-term risk. Most Proof actions (Record/Attest) carry *no* escrow and are unaffected. |
+| R6 | **JCS canonicalization bugs ⇒ signatures don't verify across parties.** If two implementations don't canonicalize byte-identically, multi-party co-signing is dead. | **Medium** | `proof.objects@1` as pure logic unit-tested against the SPEC examples; conformance test vectors from Appendix A (A1). CI gate. |
+| R7 | **ANP is v0.3-draft with open questions (ANP §16).** The spec may change before v1.0. | **Low-medium** | `proof.objects@1` pins `anp_version`. Proof modules version along. Operationalize a migration/versioning policy: R14b. Open-question areas (trust-list governance, arbiter-pool bootstrap) only go productive in later phases. |
+| R8 | **Name collision `verifier@1`.** Already exists as the LLM claim verifier. | **Low** | Proof uses the `proof.*` namespace throughout. No capability is named `verify`/`verifier`. (Package prefix separately: R16.) |
+| **R9** | **External verifiability without a data-availability surface** (Codex C4). A chain hash alone is not enough to independently check a receipt if the full off-chain object can't be retrieved — the "survives omadia" / verify-link promises (Phase 2/3) need a DA layer. | **Medium-high** | DA locator + a public retrieval/verify-link surface as an **explicit Phase-2 precondition** before "survives omadia" is claimed. Specify: what the link shows, authorization, redaction, locator behavior, semantics for an unavailable object. |
+| **R10** | **Kernel escalation gate** (Codex C2/C3). A pre-dispatch hook in the ~1k-LOC orchestrator; the only *planned* kernel change. | **Medium** | Design as a generic pre-dispatch policy hook in the kernel (not proof-wired), Phase 4. Contract + tests before the PR; confirm the `harness-verifier` precedent (A6). |
+| **R11** | **Custodial-key scaling & lifecycle** (Codex C2 + IMPORTANT). Does the per-plugin vault carry per-user/-agent keys at the required scale? Backup/restore, compromised-key revocation, rotation, recovery, operator runbooks are missing. | **High** | Stage-A verification against the real vault state (A7); possibly a kernel-side custody service (second kernel change, §4). Lifecycle runbook as its own cross-cutting work item. |
+| **R12** | **DID method + resolver unresolved** (Codex C6). Determines whether identity needs a ledger lookup (`did:iota`/`did:ethr`) or is locally/custodially resolvable (`did:key`/`did:web`); must match the anchor profile; **hard to reverse** because DIDs sit in every anchored object. | **High** | Blocking Stage-A decision *before* `proof.identity@1`: method, resolver, rotation, pairwise mapping, migration. My take: `did:key` (custodial, no lookup) or `did:web` under the instance domain; `did:iota` only if the reference profile suggests it. |
+| **R13** | **Privacy-Shield dataflow per tool unspecified** (Codex C7). `thread_ref`/`counterparties[]`/`evidence[]` in tool inputs could leak linkable IDs/raw data across the LLM boundary. | **Medium-high** | Mandatory Stage-A spec per tool: LLM-visible vs. server-interned vs. summarized; opaque handles instead of raw references (UX law 5). |
+| **R13b** | **GDPR / right to erasure vs. immutable anchors** (Codex IMPORTANT). Hash + link graph stay on-chain even when the off-chain object is deleted. | **Medium** | Decision: what is deletable (off-chain `body`/keys), what stays (hash/anchor); how the residual hash/link is explained; does deletion break verification? As a compliance work item, before productive PII processing. |
+| **R14** | **Observability & async-failure handling missing** (Codex IMPORTANT). Anchor retry, dead-letter, finality timeout, duplicate-anchor idempotency, metrics, degraded states. | **Medium** | Async anchor worker with retry/idempotency/timeout + a user-visible degraded state (UX law 4). Observability baseline as cross-cutting. |
+| **R14b** | **`anp_version` migration not operationalized** (Codex IMPORTANT). Version pinned, but no schema version registry/migration policy/backward verify. | **Low-medium** | Schema version registry, migration policy, backward verification, fixture versioning, compatibility tests — couple with the schema matrix (§1.4.1). |
+| **R15** | **Object-store mechanism open, Phase 1 depends on it** (Codex C1). KG vs. Memory vs. Mirror; ACL/retrieval/encryption/export/retention undefined. | **High** | Blocking Stage-A decision *before* `proof.store@1`/Phase 1: logical→physical mapping, ACL model, retrieval API, encryption, export, retention + acceptance tests (A4/A5). |
+| **R16** | **Package naming not cosmetic** (Codex C8). `harness-proof-*` contradicts §1.2; wrong package paths/manifests/artifacts loom. | **Low-medium** | Stage-A naming decision + repo-layout ADR *before* the first package is created. |
+| **R17** | **Multi-tenant isolation not covered** (Codex IMPORTANT). Tenant scoping for identities, mandates, objects, anchors, verify-link access, auditor rights is missing. | **Medium** | Carry as a cross-cutting requirement on `proof.identity@1`/`proof.store@1`; acceptance criteria per affected package. |
+| **R18** | **Clock/timestamp trust** (Codex IMPORTANT). Local vs. ledger timestamp, skew, ordering disputes. | **Low-medium** | Ledger-timestamp precedence over local; skew handling + test fixtures; anchored in Phase 2 (anchoring). |
+| **R19** | **Maturity of the IOTA first-party dependencies** (A1–A8 verification 2026-06-15, SPEC §13.2). IOTA Identity (Beta, no stable release), Gas Station (pre-1.0), Notarization/Hierarchies (Alpha) carry Phase 1 (PQC VCs/custodial signing) and Phase 2 (anchor/sponsoring). | **Medium** (from Phase 2) | `anchor-mock` keeps Phases 0–1 chain-free (already planned); IOTA dependencies only sharp in Phase 2; pin versions, plan for pre-GA API breaks; evaluate binding to IOTA Notarization (anchor) + Hierarchies (trust list) in the PoC (ANP §17 Phase 2) instead of rolling our own anchor objects. |
 
 ---
 
-## 7. Phasenplan — entlang der Use-Cases, nicht entlang der Technik
+## 7. Phase plan — along the use cases, not along the tech
 
-Die Sequenz folgt zwei Prinzipien: **(a) frühester Solo-Nutzen ohne Netzwerkeffekt** (löst R4), **(b) A2A — dein strategisches Zentrum — als klares Ziel, aber auf tragfähigem Fundament.** Jede Phase ist demonstrierbar nützlich, nicht nur „Infrastruktur". **Neu (Codex):** eine vorgeschaltete **Stufe A (Architektur-Freeze)** löst die blockierenden Entscheidungen, *bevor* Code entsteht — sie ersetzt die früheren „offenen Entscheidungspunkte" (§10 alt) und macht sie zu harten Gates.
+The sequence follows two principles: **(a) earliest solo value with no network effect** (solves R4), **(b) A2A — the strategic centre — as a clear goal, but on a load-bearing foundation.** Every phase is demonstrably useful, not just "infrastructure". **New (Codex):** an upfront **Stage A (architecture freeze)** resolves the blocking decisions *before* code exists — it replaces the former "open decision points" (old §10) and turns them into hard gates.
 
-### Stufe A — Architektur-Freeze (kein Code, blockierend)
-**Ziel:** Die schwer reversiblen Entscheidungen treffen und die tragenden Annahmen gegen die echten Repos verifizieren, bevor irgendein Paket angelegt wird. Jeder Punkt ist Voraussetzung für mindestens eine spätere Phase.
-**Inhalte (Gates):**
-1. **Paket-Naming & Repo-Layout** festlegen (R16) → ADR.
-2. **Object-Store-Mechanismus** entscheiden: KG vs. Memory vs. Mirror, inkl. ACL/Retrieval/Encryption/Export/Retention-Spec (R15, A4/A5) — Voraussetzung für `proof.store@1`/Phase 1.
-3. **DID-Methode + Resolver** entscheiden: Methode, Rotation, Pairwise-Mapping, Migration (R12) — Voraussetzung für `proof.identity@1`.
-4. **Custodial-Key-Skalierung** prüfen: per-plugin Vault vs. Kernel-Custody-Service (R11, A7) — bestimmt, ob ein zweiter Kernel-PR nötig ist.
-5. **Schema-Backflow-Matrix** finalisieren (§1.4.1) inkl. ANP-PR-Prozess + Fixture-/Versionierungs-Policy (R14b).
-6. **Privacy-Shield-Datenfluss pro Tool** spezifizieren (R13).
-7. **Annahmen A1–A8 (§11) verifizieren** gegen `byte5ai/anp` SPEC.md und `byte5ai/omadia`-Code.
-8. **ADRs schreiben:** `0001-anp-proof-custodial-identity.md` (Custody-Entscheidung, R1, inkl. HSM/QES-Upgrade-Pfad), `0002-schema-source-of-truth.md` (§1.4), `0003-repo-layout-and-naming.md` (R16), `0004-object-store.md` (R15), `0005-did-method.md` (R12).
-**Done:** Alle fünf ADRs gemerged; Schema-Matrix steht; A1–A8 bestätigt oder als Risiko quittiert. Erst dann beginnt Phase 0.
+### Stage A — architecture freeze (no code, blocking)
+**Goal:** make the hard-to-reverse decisions and verify the load-bearing assumptions against the real repos before any package is created. Each item is a precondition for at least one later phase.
+**Contents (gates):**
+1. **Package naming & repo layout** (R16) → ADR.
+2. **Object-store mechanism** decide: KG vs. Memory vs. Mirror, incl. ACL/retrieval/encryption/export/retention spec (R15, A4/A5) — precondition for `proof.store@1`/Phase 1.
+3. **DID method + resolver** decide: method, rotation, pairwise mapping, migration (R12) — precondition for `proof.identity@1`.
+4. **Custodial-key scaling** check: per-plugin vault vs. kernel custody service (R11, A7) — determines whether a second kernel PR is needed.
+5. **Schema-backflow matrix** finalize (§1.4.1) incl. ANP PR process + fixture/versioning policy (R14b).
+6. **Privacy-Shield dataflow per tool** specify (R13).
+7. **Verify assumptions A1–A8 (§11)** against `byte5ai/anp` SPEC.md and `byte5ai/omadia` code. ✅ done 2026-06-15 → `research.md`.
+8. **Write the ADRs:** `0001-anp-proof-custodial-identity.md` (custody decision, R1, incl. HSM/QES upgrade path), `0002-schema-source-of-truth.md` (§1.4), `0003-repo-layout-and-naming.md` (R16), `0004-object-store.md` (R15), `0005-did-method.md` (R12).
+**Done:** all five ADRs merged; the schema matrix stands; A1–A8 confirmed or accepted as a risk. Only then does Phase 0 begin.
 
-### Phase 0 — Fundament (kein Nutzer-Feature)
-**Pakete:** `proof.objects@1`, `proof.anchor-mock@1`, Skeleton `proof.store@1`, Plugin-Scaffold + CI-Pipeline.
-**Ziel:** ANP-Object-Bau + Canonicalization + Schema-Validierung, gegen Spec-Testvektoren grün; ein In-Memory-Mock-Ledger; ein gegen das Plugin-Starter-Template gebautes, signier-/paketierbares Skeleton mit grüner CI. **Kein UI.** Dies ist die Korrektheits-Versicherung (R6) und macht alles Folgende CI-testbar.
-**CI-Breite (Codex IMPORTANT — nicht nur Canonicalization):** Unit (JCS/Hash-Chain gegen Appendix-A-Vektoren), Schema-Validierung, Plugin-Packaging/Signing, Capability-Registrierung, später Privacy-Shield-Boundary-Tests.
-**Done-Kriterium (zwei harte Gates):**
-1. Ein Memorandum lässt sich bauen, co-signieren (simuliert), kanonisieren und „verankern" (mock) — byte-identisch reproduzierbar.
-2. **Jedes hier definierte Object-Schema hat einen offenen PR gegen `byte5ai/anp` (Appendix A)** gemäß Schema-Matrix (§1.4.1) — für Phase 0: `memorandum`. Ohne diesen PR gilt Phase 0 als nicht abgeschlossen (§1.4).
+### Phase 0 — foundation (no user feature)
+**Packages:** `proof.objects@1`, `proof.anchor-mock@1`, a `proof.store@1` skeleton, plugin scaffold + CI pipeline.
+**Goal:** ANP object build + canonicalization + schema validation, green against spec test vectors; an in-memory mock ledger; a signable/packageable skeleton built against the plugin-starter template with green CI. **No UI.** This is the correctness insurance (R6) and makes everything downstream CI-testable.
+**CI breadth (Codex IMPORTANT — not just canonicalization):** unit (JCS/hash chain against Appendix-A vectors), schema validation, plugin packaging/signing, capability registration, later Privacy-Shield boundary tests.
+**Done criterion (two hard gates):**
+1. A memorandum can be built, co-signed (simulated), canonicalized and "anchored" (mock) — byte-identically reproducible.
+2. **Every object schema defined here has an open PR against `byte5ai/anp` (Appendix A)** per the schema matrix (§1.4.1) — for Phase 0: `memorandum`. Without that PR, Phase 0 counts as not done (§1.4).
 
-### Phase 1 — „Festhalten", solo (Human-to-Nobody) · *der Türöffner*
-**Voraussetzung:** Stufe-A-Gates 2 (Store), 3 (DID), 4 (Custody) entschieden.
-**Use-Case:** Manager hält fest „Ich habe heute Entscheidung X getroffen, Grund Y" — Milestone für die Nachwelt. Kein Gegenüber, sofortiger Nutzen.
-**Pakete:** `proof.identity@1` (custodial DID/Key, **nur Human**), `proof.signer@1`, `proof.store@1` (gemäß Stufe-A-Entscheidung), erstes UI: `proof.record` solo + Proof-Inbox + Beleg-Detailsicht. **Void-on-unavailability**-Verhalten spezifiziert + implementiert.
-**Anchor:** noch Mock *oder* erstes echtes IOTA-Profil, je nach Reife (Entscheidung in dieser Phase).
-**Warum zuerst:** Kein Adoptions-Netzwerkeffekt (R4), validiert die *gesamte* Krypto-Kapselung (Gesetz 2+5) an einem risikoarmen Fall, liefert ein vorzeigbares Feature.
-**Done:** Ein Nicht-IT-User hält etwas fest, sieht „✓ Festgehalten", findet es in der Inbox, sieht null Krypto — und ein Auditor kann den technischen Beleg aufklappen.
+### Phase 1 — "Record", solo (Human-to-Nobody) · *the opener*
+**Precondition:** Stage-A gates 2 (store), 3 (DID), 4 (custody) decided.
+**Use case:** a manager records "I made decision X today, reason Y" — a milestone for the record. No counterpart, immediate value.
+**Packages:** `proof.identity@1` (custodial DID/key, **human only**), `proof.signer@1`, `proof.store@1` (per the Stage-A decision), first UI: `proof.record` solo + proof inbox + receipt detail view. **Void-on-unavailability** behavior specified + implemented.
+**Anchor:** still mock *or* the first real IOTA profile, depending on maturity (decided in this phase).
+**Why first:** no adoption network effect (R4), validates the *entire* crypto capsule (laws 2+5) on a low-risk case, ships a presentable feature.
+**Done:** a non-IT user records something, sees "✓ Recorded", finds it in the inbox, sees zero crypto — and an auditor can expand the technical receipt.
 
-### Phase 2 — Echte Verankerung + „Bezeugen"
-**Use-Case:** US-6-artig — ein Vorgang/Audit-Ergebnis wird bezeugt und überlebt das System, das es erzeugt hat.
-**Pakete:** `proof.anchor-iota@1` produktiv (IOTA-Rebased-Profil ANP §13.2) inkl. **asynchronem Anchor-Worker (Retry/Idempotenz/Timeout, R14)**, `proof.attest` (Standalone-Attestation, `observed`/`relayed`), asynchroner Confirmation-State im UI (Gesetz 4), Status-Snapshots (`proof_status_snapshots`), **DA-Locator + Verify-Link-Foundation (R9)**, Timestamp-Handling (R18).
-**Vorbedingung (Codex C4):** Die „überlebt omadia"-Behauptung gilt erst, wenn die DA-/Verify-Link-Fläche steht — sie ist Teil dieser Phase, nicht Annahme.
-**Done:** „Bezeugen" funktioniert end-to-end gegen eine echte Kette; der Confirmation-State trudelt still nach; Verifikation hängt nicht von omadias Weiterexistenz ab (über DA + Verify-Link nachgewiesen); ANP-PR für `attest` offen.
+### Phase 2 — real anchoring + "Witness"
+**Use case:** US-6-like — an action/audit result is witnessed and survives the system that produced it.
+**Packages:** `proof.anchor-iota@1` productive (IOTA-Rebased profile ANP §13.2) incl. an **async anchor worker (retry/idempotency/timeout, R14)**, `proof.attest` (standalone attestation, `observed`/`relayed`), an async confirmation state in the UI (law 4), status snapshots (`proof_status_snapshots`), the **DA locator + verify-link foundation (R9)**, timestamp handling (R18).
+**Precondition (Codex C4):** the "survives omadia" claim only holds once the DA/verify-link surface stands — it is part of this phase, not an assumption.
+**Done:** "Witness" works end-to-end against a real chain; the confirmation state trickles in quietly; verification does not depend on omadia's continued existence (proven via DA + verify-link); the ANP PR for `attest` is open.
 
-### Phase 3 — Zwei Parteien (Human-to-Human; Agent draftet, Mensch signiert)
-**Use-Case:** Meeting-Protokoll mit Verbindlichkeit (H2H); ein Agent *erstellt den Inhalt* eines Vorschlags, der Mensch signiert ihn als Principal.
-**Pakete:** Co-Signing-Flow produktiv (`proof.record` mit N Parteien, detached signatures ANP §6.3), `proof.agree` (offer/accept, **noch ohne** Escrow), Bestätigungs-Dialog für die Gegenpartei, „Verify-Link" für Gegenparteien ohne omadia (read-only, permissionless, auf R9-Fundament).
-**Scope-Grenze (wichtig, sonst falsche Erwartung):** Ein *verbindliches* zweiseitiges Agreement verlangt eine anchored Signatur (`accept`) **jeder** Partei (ANP §7.4, m10). Beide Seiten müssen also ANP-fähig sein. Der „Verify-Link" lässt eine Nicht-omadia-Gegenpartei einen Vorgang **prüfen**, nicht **mitzeichnen**. Verbindliche H2H-Vorgänge mit einer Partei *ohne* ANP-Stack sind in v1 **nicht** möglich (nur einseitig festhalten + Link zur Prüfung schicken). Eine browserbasierte Leichtsignatur für externe Gegenparteien (custodial guest-DID) ist denkbares späteres Feature, nicht v1-Scope.
-**Abgrenzung (Codex C3):** *Verbindliches* Agent→Human (Agent signiert unter Mandate) ist **nicht** in dieser Phase — es braucht Mandate + Gate und liegt in Phase 4 (§3.2). In Phase 3 darf ein Agent nur *draften*; die einzige bindende Signatur ist die des Menschen.
-**Done:** Zwei *omadia-/ANP-fähige* Parteien halten eine Abmachung byte-identisch co-signiert fest; ein Agent kann einem Menschen einen Vorschlagsinhalt zur Signatur als Principal vorlegen; ANP-PRs für `offer`/`counter_offer`/`accept` offen.
+### Phase 3 — two parties (Human-to-Human; agent drafts, human signs)
+**Use case:** a meeting record with binding force (H2H); an agent *produces the content* of a proposal, the human signs it as principal.
+**Packages:** co-signing flow productive (`proof.record` with N parties, detached signatures ANP §6.3), `proof.agree` (offer/accept, **no escrow yet**), a confirm dialog for the counterparty, a "verify-link" for counterparties without omadia (read-only, permissionless, on the R9 foundation).
+**Scope boundary (important, otherwise wrong expectations):** a *binding* two-party agreement requires an anchored signature (`accept`) from **every** party (ANP §7.4, m10). So both sides must be ANP-capable. The "verify-link" lets a non-omadia counterparty **verify** an action, not **co-sign** it. Binding H2H actions with a party *without* an ANP stack are **not** possible in v1 (only record one-sided + send a link to verify). A browser-based lightweight signature for external counterparties (custodial guest DID) is a conceivable later feature, not v1 scope.
+**Delimitation (Codex C3):** *binding* Agent→Human (agent signs under mandate) is **not** in this phase — it needs mandate + gate and lives in Phase 4 (§3.2). In Phase 3 an agent may only *draft*; the only binding signature is the human's.
+**Done:** two *omadia-/ANP-capable* parties record an arrangement byte-identically co-signed; an agent can present proposal content to a human for signature as principal; ANP PRs for `offer`/`counter_offer`/`accept` open.
 
-### Phase 4 — Agent-to-Agent (+ verbindliches Agent-to-Human) · *das strategische Zentrum*
-**Use-Case:** Dein Favorit — KI-Agenten-Beauftragung mit Audittrail; zwei Agenten schließen end-to-end ab; zusätzlich verbindliches Agent→Human (aus Phase 3 hierher gezogen, §3.2).
-**Pakete (Proof-Repo):** `proof.identity@1` erweitert um **Agenten-DIDs + Mandate-Ausstellung** (`issueMandate`, `checkAuthority`), **Status-List-Hosting + Mandate-Revocation-Lifecycle** (Codex IMPORTANT), SD-JWT-Disclosure für Mandate (ANP §6.6, gegen Cap-Leak ANP §5.3), **Aggregate-Cap-Enforcement**, Mandate-Verwaltungs-UI (Principal setzt Caps — „Wofür darf dieser Agent ohne Rückfrage unterschreiben?").
-**Kernel-PR (`byte5ai/omadia`, R10):** das **Eskalations-Gate** als kleiner kernel-seitiger, möglichst *generischer* Pre-Dispatch-Policy-Hook, der zur Dispatch-Zeit das Mandate prüft und bei Threshold-Überschreitung die Tool-Ausführung pausiert, bis ein Human-`approve` vorliegt. Muss in den Kernel, weil es *vor* der Tool-Ausführung greift und die Plugin-API keinen Pre-Dispatch-Hook hergibt (§4, Verifier-Präzedenz A6). Kontrakt + Tests vor dem PR.
-**Done:** Zwei omadia-Agenten verschiedener Parteien schließen autonom innerhalb ihrer Mandate ab; ein verbindliches Agent→Human läuft über Mandate + `approve`; eine Aktion über der Schwelle eskaliert zuverlässig an einen Menschen; Mandate sind widerrufbar (Status-List); der gesamte Vorgang ist als Audittrail nachvollziehbar; ANP-PRs für `approve` + Mandate-VC offen.
+### Phase 4 — Agent-to-Agent (+ binding Agent-to-Human) · *the strategic centre*
+**Use case:** the favorite — AI-agent tasking with an audit trail; two agents close end-to-end; plus binding Agent→Human (pulled here from Phase 3, §3.2).
+**Packages (Proof repo):** `proof.identity@1` extended with **agent DIDs + mandate issuance** (`issueMandate`, `checkAuthority`), **status-list hosting + mandate revocation lifecycle** (Codex IMPORTANT), SD-JWT disclosure for mandates (ANP §6.6, against cap leak ANP §5.3), **aggregate-cap enforcement**, a mandate management UI (the principal sets caps — "what may this agent sign without asking?").
+**Kernel PR (`byte5ai/omadia`, R10):** the **escalation gate** as a small kernel-side, ideally *generic* pre-dispatch policy hook that checks the mandate at dispatch time and pauses tool execution on threshold exceedance until a human `approve` exists. Must go in the kernel because it hooks in *before* tool execution and the plugin API exposes no pre-dispatch hook (§4, verifier precedent A6). Contract + tests before the PR.
+**Done:** two omadia agents of different parties close autonomously within their mandates; a binding Agent→Human runs via mandate + `approve`; an over-threshold action escalates reliably to a human; mandates are revocable (status list); the whole action is traceable as an audit trail; ANP PRs for `approve` + mandate VC open.
 
-### Phase 5 — „Klären" + Settlement (Escrow & Dispute)
-**Use-Case:** US-1/US-5 — Wertvorgänge mit Escrow und der Streit, den keine Plattform besitzt.
-**Pakete:** Escrow-Hooks in `proof.anchor-iota@1` (`openEscrow`/`enforce` ANP §10/ANP §6.2.1) inkl. Bond-Funding + Challenge-Windows, `proof.resolve` (optimistischer Dispute + automatische Small-Claims-Profil-Wahl unterhalb der Wertschwelle ANP §9.4), Arbiter-/Trust-Modell + Small-Claims-Formel-Quelle, Enforcement-Autorisierung, Dispute-UI.
-**Warum zuletzt:** Höchste Komplexität, höchste Risiken (R5), und ökonomisch erst sinnvoll, wenn die günstigen High-Frequency-Fälle (Phasen 1–4) Traktion haben. Bis dahin gilt für Mikrowerte: anchored Evidence + reputationsbasierte Abschreckung, kein Forum.
-**Done:** Ein escrow-getragener Vorgang kann optimistisch finalisieren, einvernehmlich sofort settlen oder über einen Dispute zu einem durchgesetzten Ergebnis führen — ohne Kooperation der unterlegenen Seite; ANP-PRs für `assert`/`dispute`/`evidence`/`rule`/`appeal`/`enforce`/`settle`/`receipt` offen.
+### Phase 5 — "Resolve" + settlement (escrow & dispute)
+**Use case:** US-1/US-5 — value actions with escrow and the dispute no platform owns.
+**Packages:** escrow hooks in `proof.anchor-iota@1` (`openEscrow`/`enforce` ANP §10/ANP §6.2.1) incl. bond funding + challenge windows, `proof.resolve` (optimistic dispute + automatic small-claims profile selection below the value threshold ANP §9.4), an arbiter/trust model + small-claims formula source, enforcement authorization, a dispute UI.
+**Why last:** highest complexity, highest risk (R5), and economically sensible only once the cheap high-frequency cases (Phases 1–4) have traction. Until then, for micro-values: anchored evidence + reputation-based deterrence, no forum.
+**Done:** an escrow-backed action can optimistically finalize, mutually settle immediately, or resolve via a dispute into an enforced outcome — without the losing side's cooperation; ANP PRs for `assert`/`dispute`/`evidence`/`rule`/`appeal`/`enforce`/`settle`/`receipt` open.
 
-### Übersicht
+### Overview
 
-| Phase | Topologie/Säule | Liefert dem Nutzer | Kern-Risiko adressiert |
+| Phase | Topology/pillar | Delivers to the user | Core risk addressed |
 |---|---|---|---|
-| A | — (Architektur-Freeze) | (Entscheidungen/ADRs) | R11, R12, R13, R15, R16 |
-| 0 | — | (Fundament) | R6 (Canonicalization), CI-Breite |
-| 1 | H→Nobody / Record | „Festhalten" solo | R4 (Adoption), R1-Validierung |
-| 2 | — / Notarize | „Bezeugen" + echte Kette | R3 (Linkgraph), R9 (DA/Verify), R14, R18, R19 (IOTA-Reife) |
-| 3 | H→H (+ Agent draftet) | „Vereinbaren" zu zweit | R4 (Verify-Link) |
-| 4 | **A→A (+ verbindl. A→H)** | autonome Agenten + Eskalation | R10 (Gate), R1 (Mandate-Caps), R2 |
-| 5 | / Resolve | „Klären" + Escrow | R5 (Escrow-Krypto) |
+| A | — (architecture freeze) | (decisions/ADRs) | R11, R12, R13, R15, R16 |
+| 0 | — | (foundation) | R6 (canonicalization), CI breadth |
+| 1 | H→Nobody / Record | "Record" solo | R4 (adoption), R1 validation |
+| 2 | — / Notarize | "Witness" + real chain | R3 (link graph), R9 (DA/verify), R14, R18, R19 (IOTA maturity) |
+| 3 | H→H (+ agent drafts) | "Agree" between two | R4 (verify-link) |
+| 4 | **A→A (+ binding A→H)** | autonomous agents + escalation | R10 (gate), R1 (mandate caps), R2 |
+| 5 | / Resolve | "Resolve" + escrow | R5 (escrow crypto) |
 
 ---
 
-## 8. Was bewusst *nicht* in v1 gehört
+## 8. What deliberately does *not* belong in v1
 
-- **Keine eigene Marktplatz-/Discovery-Funktion.** ANP ist explizit kein Marktplatz (ANP §3.2). Agenten finden einander über A2A/Registries, nicht über Proof.
-- **Kein Token.** Settlement nutzt den nativen Chain-Asset/Stablecoin (ANP §3.2). Proof führt nie eine eigene Währung ein.
-- **Keine Multi-Tier-Appeals, keine VRF-Witness-Pools, keine Reputations-Registry** — alles in ANP definiert, aber späte/optionale Profile. Erst wenn die Basis trägt.
-- **Keine rechtliche Form (eIDAS-QES, Notariat).** Bewusst außerhalb. Proof ist der technische Nachweis; die Rechtsform ist ein separater, späterer Integrationspunkt (austauschbares `proof.identity@1` mit QES-Backend wäre der Weg).
-- **Keine browserbasierte Gast-Signatur** für Nicht-omadia-Gegenparteien (nur Verify-Link/Prüfen). Denkbar später, nicht v1.
-
----
-
-## 9. Sofort-Nächste-Schritte (konkret)
-
-1. **Proof-Repo strukturieren:** In `byte5ai/omadia-proof` dieses Dokument als `plan.md` ablegen, dazu `data-model.md` (Sektion 4.2 ausbauen, sobald der Store-Mechanismus entschieden ist — Stufe A), `research.md` (ANP-Spec-Auszüge + A1–A8-Verifikation), `tasks.md`.
-2. **Stufe A starten** (§7): die fünf ADRs schreiben, Schema-Matrix finalisieren, A1–A8 verifizieren. **Kein Paket-Code vor Stufe-A-Done.**
-3. **Schema-Quelle klären, dann bauen:** Da omadia die erste ANP-Implementierung ist, definiert `proof.objects@1` die Object-Schemas — **mit gleichzeitigem PR gegen `byte5ai/anp` Appendix A** (§1.4) gemäß Matrix. Spec-Testvektoren aus Appendix A als Fixtures, soweit vorhanden; wo nicht, werden sie hier erzeugt *und* in den RFC gespielt.
+- **No own marketplace/discovery function.** ANP is explicitly not a marketplace (ANP §3.2). Agents find each other via A2A/registries, not via Proof.
+- **No token.** Settlement uses the native chain asset/stablecoin (ANP §3.2). Proof never introduces its own currency.
+- **No multi-tier appeals, no VRF witness pools, no reputation registry** — all defined in ANP, but late/optional profiles. Only once the base holds.
+- **No legal form (eIDAS-QES, notariat).** Deliberately outside. Proof is the technical proof; the legal form is a separate, later integration point (a swappable `proof.identity@1` with a QES backend would be the route).
+- **No browser-based guest signature** for non-omadia counterparties (verify-link/verify only). Conceivable later, not v1.
 
 ---
 
-## 10. Entscheidungspunkte → in Stufe A überführt
+## 9. Immediate next steps (concrete)
 
-> Die ursprünglich offene Schema-Frage ist beantwortet (§1.4: omadia definiert die Schemas und spielt sie zwingend zurück). Die in der ersten Fassung als „drei offene Punkte" geführten Themen (Object-Store-Mechanismus, Custodial-Key-Skalierung, DID-Methode) sind **nicht** mehr nur Prosa, sondern **blockierende Stufe-A-Gates** (R15, R11, R12) mit ADR-Pflicht. Der Codex-Review hat zusätzlich Naming (R16) und den Privacy-Shield-Datenfluss (R13) als entscheidungs-blockierend identifiziert. Alle leben jetzt in Stufe A (§7).
-
-*(Hinweis: Die frühere Inkonsistenz „§9.4 sagt zwei, §10 listet drei" ist mit dieser Überführung erledigt.)*
+1. **Structure the Proof repo:** in `byte5ai/omadia-proof` store this document as `plan.md`, plus `data-model.md` (expand section 4.2 once the store mechanism is decided — Stage A), `research.md` (ANP spec excerpts + A1–A8 verification), `tasks.md`.
+2. **Start Stage A** (§7): write the five ADRs, finalize the schema matrix, verify A1–A8. **No package code before Stage A is Done.**
+3. **Clarify the schema source, then build:** since omadia is the first ANP implementation, `proof.objects@1` defines the object schemas — **with a simultaneous PR against `byte5ai/anp` Appendix A** (§1.4) per the matrix. Spec test vectors from Appendix A as fixtures where they exist; where not, they are produced here *and* played back into the RFC.
 
 ---
 
-## 11. Review-Resolution (Codex, 2026-06-15)
+## 10. Decision points → moved into Stage A
 
-Dieses Dokument wurde von Codex (effort high, read-only) reviewt, da es zuvor ungeprüft war. Eingearbeitete Befunde:
+> The originally open schema question is answered (§1.4: omadia defines the schemas and plays them back mandatorily). The topics carried in the first version as "three open points" (object-store mechanism, custodial-key scaling, DID method) are **no longer** just prose, but **blocking Stage-A gates** (R15, R11, R12) with mandatory ADRs. The Codex review additionally identified naming (R16) and the Privacy-Shield dataflow (R13) as decision-blocking. They all live in Stage A now (§7).
 
-| Codex-Befund | Eingearbeitet als |
+*(Note: the earlier inconsistency "§9.4 says two, §10 lists three" is resolved by this move.)*
+
+---
+
+## 11. Review resolution (Codex, 2026-06-15)
+
+This document was reviewed by Codex (effort high, read-only), since it had not been reviewed before. Incorporated findings:
+
+| Codex finding | Incorporated as |
 |---|---|
-| C1 Store-Blocker, Phase 1 hängt daran | R15 + Stufe-A-Gate 2 + §4.2-Hinweis |
-| C2 „Single Kernel PR" konditional | §4 reframed + R10/R11 + Stufe-A-Gate 4 |
-| C3 Agent→Human Vorwärts-Abhängigkeit | §3.2 + Phase 3/4 umsortiert + §3-Tabelle |
-| C4 Externe Verifizierbarkeit ohne DA-Fläche | R9 + Phase-2-Vorbedingung + Verify-Link in §5.3 |
-| C5 Schema-Gate unvollständig/doppelt | §1.4.1 Schema-Backflow-Matrix (ersetzt Prosa) |
-| C6 DID-Methode ungelöst | R12 + Stufe-A-Gate 3 + ADR-0005 |
-| C7 Privacy-Shield vs. Tool-Surface | R13 + §2.1.5/§5.1-Hinweise + Stufe-A-Gate 6 |
-| C8 Paket-Naming nicht kosmetisch | R16 + Naming als Stufe-A-Gate 1 + Capability-IDs als primäre Referenz |
-| IMPORTANT: CI zu eng | Phase-0 CI-Breite |
-| IMPORTANT: Key-Lifecycle/DR | R11 + Cross-Cutting |
-| IMPORTANT: Status-List-Hosting | Phase-4-Paket |
-| IMPORTANT: `anp_version`-Migration | R14b |
-| IMPORTANT: Observability/Async-Failure | R14 + Phase-2-Worker |
-| IMPORTANT: Void-on-unavailability | Phase-1-Done |
-| IMPORTANT: Escrow/Dispute zu dünn | Phase-5-Paket ausgebaut |
-| IMPORTANT: Multi-Tenant-Isolation | R17 |
-| IMPORTANT: GDPR/Erasure | R13b |
-| IMPORTANT: Clock/Timestamp | R18 + Phase 2 |
-| MINOR: „zwei vs. drei" | §10 bereinigt |
-| MINOR: Phase-2/5-Topologie-Zellen leer | §7-Übersicht gefüllt |
-| MINOR: „verbindlich"-Wording | UX-Gesetz 6 / R2 präzisiert |
-| MINOR: `parties[]` weggelassen vs. leer | §5.1-Tabelle präzisiert |
-| MINOR: Dateiname `plan.md` | umbenannt |
+| C1 store blocker, Phase 1 depends on it | R15 + Stage-A gate 2 + §4.2 note |
+| C2 "single kernel PR" conditional | §4 reframed + R10/R11 + Stage-A gate 4 |
+| C3 Agent→Human forward dependency | §3.2 + Phase 3/4 reordered + §3 table |
+| C4 external verifiability without a DA surface | R9 + Phase-2 precondition + verify-link in §5.3 |
+| C5 schema gate incomplete/duplicated | §1.4.1 schema-backflow matrix (replaces prose) |
+| C6 DID method unresolved | R12 + Stage-A gate 3 + ADR-0005 |
+| C7 Privacy-Shield vs. tool surface | R13 + §2.1.5/§5.1 notes + Stage-A gate 6 |
+| C8 package naming not cosmetic | R16 + naming as Stage-A gate 1 + capability IDs as the primary reference |
+| IMPORTANT: CI too narrow | Phase-0 CI breadth |
+| IMPORTANT: key lifecycle/DR | R11 + cross-cutting |
+| IMPORTANT: status-list hosting | Phase-4 package |
+| IMPORTANT: `anp_version` migration | R14b |
+| IMPORTANT: observability/async failure | R14 + Phase-2 worker |
+| IMPORTANT: void-on-unavailability | Phase-1 Done |
+| IMPORTANT: escrow/dispute too thin | Phase-5 package expanded |
+| IMPORTANT: multi-tenant isolation | R17 |
+| IMPORTANT: GDPR/erasure | R13b |
+| IMPORTANT: clock/timestamp | R18 + Phase 2 |
+| MINOR: "two vs. three" | §10 cleaned up |
+| MINOR: Phase-2/5 topology cells empty | §7 overview filled |
+| MINOR: "binding" wording | UX law 6 / R2 sharpened |
+| MINOR: `parties[]` omitted vs. empty | §5.1 table clarified |
+| MINOR: filename `plan.md` | renamed |
 
-**Annahmen-zu-verifizieren (A1–A8)** — load-bearing Aussagen über ANP-SPEC/omadia-Code. **Status: verifiziert 2026-06-15 gegen `byte5ai/anp@main` + `byte5ai/omadia@main` → `research.md`.** Ergebnis: 6/8 bestätigt; **A5** (KG ohne Encryption-at-rest) und **A7** (Vault auf O(100) Agents) mit Einschränkung — beide bestärken die Stufe-A-Gates (R15/R11). Daraus zusätzlich R19 (IOTA-Tooling-Reife) und der Naming-Befund für ADR-0003.
+**Assumptions-to-verify (A1–A8)** — load-bearing claims about the ANP spec/omadia code. **Status: verified 2026-06-15 against `byte5ai/anp@main` + `byte5ai/omadia@main` → `research.md`.** Result: 6/8 confirmed; **A5** (KG without encryption-at-rest) and **A7** (vault designed for O(100) agents) with a caveat — both strengthen the Stage-A gates (R15/R11). Plus R19 (IOTA tooling maturity) and the naming finding for ADR-0003.
 
-| # | Annahme | Hängt dran |
+| # | Assumption | Depends on it |
 |---|---|---|
-| A1 | ANP definiert die gelisteten Object-Typen, Status, Standalone-Attestation, Memorandum-Terminalverhalten, deterministische Proof-Ordnung wie beschrieben | Phase-0 Schema-/Hash-Tests |
-| A2 | ANP verlangt/empfiehlt Pairwise-DIDs stark genug, um R3-Mitigation zu rechtfertigen | Identity-Architektur, Privacy |
-| A3 | ANP unterstützt die zitierten PQC-Suites, SD-JWT-Mandate-Disclosure, IOTA-Rebased-Profil | Phase 1–4 Sign/Verify |
-| A4 | omadia-Plugins haben *keinen* rohen Postgres-Zugriff, nur per-plugin Secrets/Memory via `onMigrate` | gesamte Storage-Strategie |
-| A5 | `knowledgeGraph@1` taugt für Object-Persistenz, ACLs, Retrieval, encrypted-at-rest | Phase-1 Storage-Option |
-| A6 | omadia hat keinen plugin-erweiterbaren Pre-Dispatch-Hook; `harness-verifier`-Präzedenz gilt | Kernel-PR-Validität (R10) |
-| A7 | Vault-Skalierung/KV-Limits/Backup/Rotation reichen für per-User/-Agent-Custody | Phase-1 Identity, R11 |
-| A8 | Plugin-Signing, ZIP-Packaging, `provides/requires`, `uiRoutes`, native Tools, Privacy-Shield-Internals verhalten sich wie beschrieben | Phase-0 Scaffold, Tool-Wiring |
+| A1 | ANP defines the listed object types, statuses, standalone attestation, memorandum terminal behavior, deterministic proof order as described | Phase-0 schema/hash tests |
+| A2 | ANP requires/recommends pairwise DIDs strongly enough to justify the R3 mitigation | identity architecture, privacy |
+| A3 | ANP supports the cited PQC suites, SD-JWT mandate disclosure, IOTA-Rebased profile | Phase 1–4 sign/verify |
+| A4 | omadia plugins have *no* raw Postgres access, only per-plugin Secrets/Memory via `onMigrate` | the entire storage strategy |
+| A5 | `knowledgeGraph@1` fits object persistence, ACLs, retrieval, encrypted-at-rest | Phase-1 storage option |
+| A6 | omadia has no plugin-extensible pre-dispatch hook; the `harness-verifier` precedent holds | kernel-PR validity (R10) |
+| A7 | vault scaling/KV limits/backup/rotation suffice for per-user/-agent custody | Phase-1 identity, R11 |
+| A8 | plugin signing, ZIP packaging, `provides/requires`, `uiRoutes`, native tools, Privacy-Shield internals behave as described | Phase-0 scaffold, tool wiring |
 
 ---
 
-*Grundlage: ANP SPEC.md v0.3-draft (byte5ai/anp) + omadia public preview (byte5ai/omadia), gelesen am 15.06.2026. Codex-Review eingearbeitet 15.06.2026 (§11). Inferenzen sind im Text als solche markiert; alles andere ist direkt aus Spec/Code belegt — soweit nicht in A1–A8 als zu verifizieren geführt.*
+*Basis: ANP SPEC.md v0.3-draft (byte5ai/anp) + omadia public preview (byte5ai/omadia), read 2026-06-15. Codex review incorporated 2026-06-15 (§11). Inferences are marked as such in the text; everything else is evidenced directly from spec/code — except where A1–A8 flag it as to-be-verified.*
