@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Code-Repo-Profil: baut/testet, sobald TS-Pakete existieren (Phase 0).
+      # Bis dahin ist der Job grün und validiert nur, dass das Repo konsistent ist.
+      - name: Build & test
+        run: |
+          if [ -f package.json ]; then
+            echo "package.json found — installing, building, testing."
+            if [ -f package-lock.json ]; then npm ci; else npm install; fi
+            npm run build --if-present
+            npm test
+          else
+            echo "No TS packages yet (Stufe A / Phase 0 bootstrap) — nothing to build."
+          fi
+
+      # Solange das Repo Docs-getragen ist, halten wir die zentralen Dokumente
+      # wenigstens auf balancierte Markdown-Code-Fences geprüft (deterministisch,
+      # dependency-frei). Verschwindet, wenn der Code-Test-Pfad oben greift.
+      - name: Docs sanity (balanced code fences)
+        run: |
+          status=0
+          for f in plan.md research.md AGENTS.md CONTRIBUTING.md; do
+            [ -f "$f" ] || continue
+            fences=$(grep -c '^```' "$f" || true)
+            if [ $((fences % 2)) -ne 0 ]; then
+              echo "::error file=$f::unbalanced code fences ($fences)"; status=1
+            fi
+          done
+          exit $status
